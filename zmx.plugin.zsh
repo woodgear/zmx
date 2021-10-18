@@ -83,13 +83,19 @@ load_shell_actions() {
     echo "start load"
     echo $actions_path 
     rm -rf ~/.zsh/shell-actions
-    mkdir -p  ~/.zsh/shell-actions
     for p in $(echo $actions_path| sed "s/:/ /g")
     do
+       echo index $p
        ln -s $p  ~/.zsh/shell-actions
-       source_it ~/.zsh/shell-actions
+    done
+    source_it ~/.zsh/shell-actions
+
+    for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
+        short=$(echo $action | sed 's/-//g')
+        alias $short=$action
     done
 }
+
 
 mx() {
     cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} | fzf)
