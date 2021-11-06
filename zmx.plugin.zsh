@@ -1,6 +1,5 @@
 echo "load zmx"
 
-
 source_it() {
     local p=$1
     if [ -f "$p" ]; then
@@ -66,21 +65,9 @@ count-actions() {
     print -rl ${(k)functions_source[(R)*shell-actions*]} |wc -l
 }
 
-load_awesome_shell_actions() {
-    awesome_shell_actions_path=$1
-    if [ -d $awesome_shell_actions_path ] 
-    then 
-        . $awesome_shell_actions_path/scripts/awesome-shell-actions.sh
-        awesome-shell-actions-load $awesome_shell_actions_path
-
-    else
-        echo "cloud not find awesome-shell-actions in $awesome_shell_actions_path ignore"
-    fi
-}
-
-load_shell_actions() {
+zmx-load-shell-actions() {
     local actions_path=$SHELL_ACTIONS_PATH
-    echo "start load"
+    echo "start load " $actions_path
     echo $actions_path 
     source_it ~/.zsh/shell-actions
     for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
@@ -89,8 +76,8 @@ load_shell_actions() {
     done
 }
 
-reload_shell_actions() {
-    echo $SHELL_ACTIONS_PATH
+zmx-reload-shell-actions() {
+    echo "action path" $SHELL_ACTIONS_PATH
     local actions_path=$SHELL_ACTIONS_PATH
     rm -rf ~/.zsh/shell-actions
     mkdir -p  ~/.zsh/shell-actions
@@ -103,7 +90,7 @@ reload_shell_actions() {
 
 
 mx() {
-    cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} | fzf)
+    cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} |grep -v _ | fzf)
     source_file=$(echo $functions_source[$cmd])
     if grep "$cmd" $source_file -A 1 |grep -q 'arg-len'; then
         set_args_doc $cmd
