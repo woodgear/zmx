@@ -1,13 +1,14 @@
-echo "load zmx"
 
+echo "load zmx"
 source_it() {
     local p=$1
     if [ -f "$p" ]; then
         if [[ $p == *.sh ]]; then
             echo "source file $p"
             . $p
-            if [[ $? -ne 0 ]]; then
+            if [ $? -ne 0 ]; then
                 echo "source $p fail"
+                exit 1
             fi
         fi
     fi
@@ -65,15 +66,40 @@ count-actions() {
     print -rl ${(k)functions_source[(R)*shell-actions*]} |wc -l
 }
 
+function date-ms() {
+	date +"%Y %m %e %T.%6N"
+}
+
+function time-diff-ms() {
+	local start=$1
+	local end=$2
+
+	local output=$( bash <<-EOF
+	python - <<-START
+		from datetime import datetime
+		import humanize
+		start = datetime.strptime("$start","%Y %m %d %H:%M:%S.%f")
+		end = datetime.strptime("$end","%Y %m %d %H:%M:%S.%f")
+		print(humanize.precisedelta(end-start, minimum_unit="microseconds"))
+	START
+	EOF
+	)
+	echo $output
+}
+
 zmx-load-shell-actions() {
     local actions_path=$SHELL_ACTIONS_PATH
     echo "start load " $actions_path
+    local start=$(date-ms)
     echo $actions_path 
     source_it ~/.zsh/shell-actions
     for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
         short=$(echo $action | sed 's/-//g')
         alias $short=$action
     done
+    local count=$(count-actions)
+    local end=$(date-ms)
+    echo "load $count actions,spend $(time-diff-ms "$start" "$end")."
 }
 
 zmx-reload-shell-actions() {
