@@ -75,7 +75,7 @@ function time-diff-ms() {
 	local end=$2
 
 	local output=$( bash <<-EOF
-	python - <<-START
+	python3 - <<-START
 		from datetime import datetime
 		import humanize
 		start = datetime.strptime("$start","%Y %m %d %H:%M:%S.%f")
