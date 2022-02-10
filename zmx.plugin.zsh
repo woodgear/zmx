@@ -109,8 +109,8 @@ zmx-reload-shell-actions() {
     mkdir -p  ~/.zsh/shell-actions
     for p in $(echo $actions_path| sed "s/:/ /g")
     do
-       echo index $p
-       ln -s $p  ~/.zsh/shell-actions
+        echo index $p
+        ln -s $p  ~/.zsh/shell-actions
     done
 }
 
@@ -119,7 +119,6 @@ mx() {
     cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} |grep -v _ | fzf)
     source_file=$(echo $functions_source[$cmd])
     if grep "$cmd" $source_file -A 1 |grep -q 'arg-len'; then
-        set_args_doc $cmd
         LBUFFER+=$cmd
         LBUFFER+=" "
         zle reset-prompt
@@ -129,5 +128,32 @@ mx() {
     fi
 }
 
+lmx() {
+    # mx local action
+    local source_file=$(fd -a actions.sh ./)
+    echo "source" $source_file
+    local cmd=$(cat $source_file |rg "^\s*function\s(.*)\s*\{$" -r  '$1' |grep -v '_.*'| fzf --preview "grep  {} $source_file -A 5" )
+    echo "cmd $cmd"
+    if [ -z "$cmd" ] ; then
+        echo "empty cmd ignore"
+        zle reset-prompt
+        return
+    fi
+    if grep "$cmd" $source_file -A 1 |grep -q 'arg-len'; then
+        LBUFFER+="source $source_file; $cmd"
+        LBUFFER+=" "
+        zle reset-prompt
+    else
+        local full_cmd="source $source_file; $cmd"
+        echo "full_cmd $full_cmd"
+        local atuin_id=$(atuin history start "$full_cmd") 
+        eval $full_cmd
+        atuin history end $atuin_id --exit "$?"
+        zle reset-prompt
+    fi
+}
+
 zle -N  mx
+zle -N  lmx
+bindkey ',xx' lmx
 bindkey ',xm' mx
