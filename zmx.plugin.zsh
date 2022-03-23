@@ -109,8 +109,10 @@ zmx-reload-shell-actions() {
     mkdir -p  ~/.zsh/shell-actions
     for p in $(echo $actions_path| sed "s/:/ /g")
     do
-        echo index $p
-        ln -s $p  ~/.zsh/shell-actions
+		local link=$(echo $p|sed 's/\//_/g')
+        echo index $p $link
+		
+        ln -s $p  ~/.zsh/shell-actions/$link
     done
 }
 
