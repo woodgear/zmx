@@ -1,25 +1,24 @@
 
 echo "load zmx"
-source_it() {
-    local p=$1
-    if [ -f "$p" ]; then
-        if [[ $p == *.sh ]]; then
-            echo "source file $p"
-            . $p
-            if [ $? -ne 0 ]; then
-                echo "source $p fail"
-                exit 1
-            fi
-        fi
-    fi
+init-actions() {
+	local p=$1
+	while IFS= read -r sh_path
+	do
+    	echo -- source "$sh_path"--
+		source $sh_path
+	done <<< "$(fd -L '.*\.sh' $p)"
 
-    if [ -d "$p" ]; then
-        echo "source dir $p start"
-        for file in $p/*; do
-            source_it "$file"
-        done
-        echo "source dir $p over"
-    fi
+	for c in $(seq 5)
+	do
+		while IFS= read -r sh_path
+		do
+			if [ -z "$sh_path" ]; then
+				continue
+			fi
+    		echo -- gen $c source "$sh_path"--
+			# source $sh_path
+		done <<< "$(fd -L '.*\.actions\.gen$c\.sh' $p)"
+	done
 }
 
 awesome-shell-actions-load() {
@@ -28,7 +27,7 @@ awesome-shell-actions-load() {
     if [ -d $awesome_shell_actions_path ] 
     then 
         echo "find awesome-shell-actions in ${awesome_shell_actions_path} start load"
-        source_it $awesome_shell_actions_path/scripts
+        init-actions $awesome_shell_actions_path/scripts
         if [[ $? -ne 0 ]]; then
             echo "source actions fail"
         fi
@@ -92,7 +91,7 @@ zmx-load-shell-actions() {
     echo "start load " $actions_path
     local start=$(date-ms)
     echo $actions_path 
-    source_it ~/.zsh/shell-actions
+    init-actions ~/.zsh/shell-actions
     for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
         short=$(echo $action | sed 's/-//g')
         alias $short=$action
