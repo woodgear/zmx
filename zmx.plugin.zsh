@@ -2,12 +2,14 @@
 echo "load zmx"
 init-actions() {
 	local p=$1
+	# source sh actions
 	while IFS= read -r sh_path
 	do
     	echo -- source "$sh_path"--
 		source $sh_path
 	done <<< "$(fd -L '.*\.sh' $p)"
 
+	# source generated sh actions
 	for c in $(seq 5)
 	do
 		while IFS= read -r sh_path
@@ -21,25 +23,6 @@ init-actions() {
 	done
 }
 
-awesome-shell-actions-load() {
-    echo "load start"
-    awesome_shell_actions_path=$1
-    if [ -d $awesome_shell_actions_path ] 
-    then 
-        echo "find awesome-shell-actions in ${awesome_shell_actions_path} start load"
-        init-actions $awesome_shell_actions_path/scripts
-        if [[ $? -ne 0 ]]; then
-            echo "source actions fail"
-        fi
-        for action in $(print -rl ${(k)functions_source[(R)*awesome*]});do 
-            short=$(echo $action | sed 's/-//g')
-            alias $short=$action
-        done
-    else
-        echo "cloud not find awesome-shell-actions in $awesome_shell_actions_path ignore"
-    fi
-    echo "load over"
-}
 
 edit-x-actions() {
     cmd=$(list-x-actions|fzf)
@@ -86,6 +69,15 @@ function time-diff-ms() {
 	echo $output
 }
 
+zmx-find-path-of-action() {
+	# local p=$1
+	# echo "$p"
+    local f=$(print -l $functrace | head -n 1 | cut -d ':' -f 1)
+	local p=$(type -a $f |rg -o 'from (.*)$' -r '$1')
+	local p=$(readlink -f $p)
+	echo "$p"
+}
+
 zmx-load-shell-actions() {
     local actions_path=$SHELL_ACTIONS_PATH
     echo "start load " $actions_path
@@ -115,6 +107,19 @@ zmx-reload-shell-actions() {
     done
 }
 
+zmx-add-path() {
+	local p=$(readlink -f $1)
+	if [ -z "$p" ]; then
+		echo "empty path"
+		return
+	fi
+	local new_path="export SHELL_ACTIONS_PATH=\$SHELL_ACTIONS_PATH:$p"
+	echo "new_path" $new_path
+	echo "\n$new_path"  >>  ~/.$(hostname).env
+	# reload
+	zmx-reload-shell-actions
+	zsh
+}
 
 mx() {
     cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} |grep -v _ | fzf)
