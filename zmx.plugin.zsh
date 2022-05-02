@@ -1,12 +1,19 @@
 
 echo "load zmx"
+
+source_sh() {
+	local sh_path=$1
+    echo -- source "$sh_path"--
+	echo $flatpath
+	source $sh_path
+}
+
 init-actions() {
 	local p=$1
 	# source sh actions
 	while IFS= read -r sh_path
 	do
-    	echo -- source "$sh_path"--
-		source $sh_path
+		source_sh $sh_path
 	done <<< "$(fd -L '.*\.sh' $p)"
 
 	# source generated sh actions
@@ -18,11 +25,30 @@ init-actions() {
 				continue
 			fi
     		echo -- gen $c source "$sh_path"--
-			# source $sh_path
+			source_sh $sh_path
 		done <<< "$(fd -L '.*\.actions\.gen$c\.sh' $p)"
 	done
+
+	# generated md5
+	fd -L '.*\.sh' ~/.zsh/shell-actions -x bash -c 'md5=$(md5sum {}| cut -d " " -f 1);p=$(echo {} | sed "s shell-actions shell-actions-md5 " );mkdir -p $(dirname $p) ;echo $md5 > $p.md5'
 }
 
+zmx_preexec() {
+	# 如果是zmx的action的话，如果是dirty的，先source一下
+	local cmd=$(echo $1 | awk '{ print $1}')
+	if type "$cmd" |grep -v -q 'shell-action' ; then
+		return
+	fi
+	local p=$(type -a $cmd |rg -o 'from (.*)$' -r '$1')
+	local md5p=$(echo $p | sed "s shell-actions shell-actions-md5 ").md5
+	local pmd5=$(md5sum $p | awk '{ print $1}')
+	local md5pp=$(cat $md5p)
+	if [ "$pmd5" != "$md5pp" ] ; then
+		source $p
+		echo  $pmd5 > $md5p
+		echo "source and update md5 $md5p $pmd5"
+	fi
+}
 
 edit-x-actions() {
     cmd=$(list-x-actions|fzf)
@@ -116,6 +142,8 @@ zmx-add-path() {
 	local new_path="export SHELL_ACTIONS_PATH=\$SHELL_ACTIONS_PATH:$p"
 	echo "new_path" $new_path
 	echo "\n$new_path"  >>  ~/.$(hostname).env
+	# make new env work
+	source ~/.loadhome.sh
 	# reload
 	zmx-reload-shell-actions
 	zsh
