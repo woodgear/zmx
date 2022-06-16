@@ -95,6 +95,16 @@ function time-diff-ms() {
 	echo $output
 }
 
+zmx-find-base-of-action() {
+	local f=$1
+	if [ -z "$f" ] ; then
+		f=$(print -l $functrace | head -n 1 | cut -d ':' -f 1)
+	fi
+	local p=$(type -a $f |rg -o 'from (.*)$' -r '$1')
+	local p=$(readlink -f $p)
+	echo $(dirname "$p")
+}
+
 zmx-find-path-of-action() {
 	local f=$1
 	if [ -z "$f" ] ; then
