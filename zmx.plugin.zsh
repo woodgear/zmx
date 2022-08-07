@@ -202,3 +202,18 @@ function zmx-bind-key() {
     bindkey ',xx' lmx
     bindkey ',xm' mx
 }
+
+
+function zmx-gen-wapper() {
+    mkdir -p ~/.zsh/shell-actions-wapper
+    local total=$(list-x-actions | wc -l)
+    local index=1
+    for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
+        echo "
+       $action "\$@"
+" > ~/.zsh/shell-actions-wapper/$action.sh
+    chmod a+x ~/.zsh/shell-actions-wapper/$action.sh
+        echo init $action $index/$total
+        ((index=index+1))
+    done
+}
