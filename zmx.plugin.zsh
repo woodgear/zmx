@@ -173,13 +173,16 @@ function lmx() {
     local source_file=$(fd -a actions.sh ./)
     echo "source" $source_file
     local cmd=$(cat $source_file |rg "^\s*function\s(.*)\s*\{$" -r  '$1' |grep -v '_.*'| fzf --preview "grep  {} $source_file -A 5" )
+    local cmd=$(echo $cmd|sed "s/()\s//g")
     echo "cmd $cmd"
     if [ -z "$cmd" ] ; then
         echo "empty cmd ignore"
         zle reset-prompt
         return
     fi
-    if grep "$cmd" $source_file -A 1 |grep -q 'arg-len'; then
+    local annotation=$(grep "function\s$cmd" $source_file -A 1)
+    echo "arg-annno $annotation"
+    if  echo $annotation |grep -q 'arg-len'; then
         LBUFFER+="source $source_file; $cmd"
         LBUFFER+=" "
         zle reset-prompt
