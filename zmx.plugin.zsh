@@ -121,6 +121,10 @@ function zmx-reload-shell-actions() {
     echo "start index"
     for p in $(echo $actions_path| sed "s/:/ /g")
     do
+        if [ ! -e "$p" ] ;then
+            echo "$p not exist "
+            return
+        fi
 		local link=$(echo $p|sed 's/\//_/g')
         echo index $p $link
         ln -s $p  $index_path/$link
@@ -134,7 +138,7 @@ function zmx-reload-shell-actions() {
 	done <<< "$(fd -L --glob '*.*sh' $index_path)"
     echo "end summary"
 	# generated md5
-	fd -L --glob "*.sh" $index_path -x bash -c 'md5=$(md5sum {}| cut -d " " -f 1);p=$(echo {} | sed "s shell-actions shell-actions-md5 " );mkdir -p $(dirname $p) ;echo $md5 > $p.md5'
+	fd -L --glob "*.sh" $index_path -x bash -c 'md5=$(md5sum {}| cut -d " " -f 1);p=$(echo {} | sed "s shell-actions shell-actions-md5 " );mkdir -p $(dirname $p) ;echo "$md5 $p.md5"; echo $md5 > $p.md5'
     echo "end md5 cache"
     zmx-load-shell-actions
 }
