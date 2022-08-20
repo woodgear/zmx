@@ -1,53 +1,13 @@
-
 echo "load zmx"
 
+ZMX_BASE=~/.zmx
 
-function zmx_preexec() {
-	# 如果是zmx的action的话，如果是dirty的，先source一下
-	local cmd=$(echo $1 | awk '{ print $1}')
-	if type "$cmd" |grep -v -q 'shell-action' ; then
-		return
-	fi
-	local p=$(type -a $cmd |rg -o 'from (.*)$' -r '$1')
-	local md5p=$(echo $p | sed "s shell-actions shell-actions-md5 ").md5
-	local pmd5=$(md5sum $p | awk '{ print $1}')
-	local md5pp=$(cat $md5p)
-	if [ "$pmd5" != "$md5pp" ] ; then
-		source $p
-		echo  $pmd5 > $md5p
-		echo "source and update md5 $md5p $pmd5"
-	fi
-}
 
-function edit-x-actions() {
-    cmd=$(list-x-actions|fzf)
-    source_file=$(type $cmd|rg -o '.* from (.*)' -r '$1'  |tr -d '\n\r')
-
-    cmd_start_line=$(grep -no "$cmd()" $source_file |cut -d ':' -f 1 |tr -d '\n\r')
-    echo $source_file
-    echo $cmd_start_line
-    # @keyword: vim edit file in special line
-    vim +$cmd_start_line $source_file
-}
-
-function which-x-actions() {
-    cmd=$(list-x-actions|fzf)
-    which $cmd
-}
-
-function list-x-actions() {
-    print -rl ${(k)functions_source[(R)*shell-actions*]}
-}
-
-function count-actions() {
-    print -rl ${(k)functions_source[(R)*shell-actions*]} |wc -l
-}
-
-function function date-ms() {
+function date-ms() {
 	date +"%Y %m %e %T.%6N"
 }
 
-function function time-diff-ms() {
+function time-diff-ms() {
 	local start=$1
 	local end=$2
 
@@ -84,41 +44,40 @@ function zmx-find-path-of-action() {
 	echo "$p"
 }
 
-function zmx-load-shell-actions() {
-    # local actions_path=$SHELL_ACTIONS_PATH
-    # echo "start load " $actions_path
-    local start=$(date-ms)
-    echo "start source"
-    # echo $actions_path 
-    if [ ! -f ~/.zsh/actions.sh ]; then
-        echo "no actions found ignore"
-        return
-    fi
-    source ~/.zsh/actions.sh
-    echo "end source $?"
-    for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
-        short=$(echo $action | sed 's/-//g')
-        alias $short=$action
-    done
-    local count=$(count-actions)
-    local end=$(date-ms)
-    echo "load $count actions,spend $(time-diff-ms "$start" "$end")."
-}
+
+
 
 function zmx-reload-shell-actions() {
     echo "action path" $SHELL_ACTIONS_PATH
     local actions_path=$SHELL_ACTIONS_PATH
-    local summary_path=~/.zsh/actions.sh
-    local index_path=~/.zsh/shell-actions
-    # clear
-    rm -rf ~/.zsh/shell-actions-md5
-    rm -rf $index_path
-    rm -rf $summary_path
+    local base=$ZMX_BASE
+    mkdir -p $base
 
-    mkdir -p  $index_path
-    mkdir -p  ~/.zsh/shell-actions-md5
-    touch $summary_path
+    local start=$(date-ms)
+    # will link add actions under $base/index
+    _zmx_index_all_actions $base
+    # will build actions db under $base/action.db from $base/index
+    _zmx_build_db $base $base/index
+    # will gen a sh include all source xx under $base/import.sh
+    _zmx_gen_import $base $base/actions.db
+    # will gen a md5 include all source xx under $base/import.sh
+    _zmx_gen_md5 $base $base/actions.db
+    zmx-load-shell-actions
+    local end=$(date-ms)
+    local record="reload over, spend $(time-diff-ms "$start" "$end")."
+    echo $record >> $ZMX_BASE/record
+    cat $ZMX_BASE/record
+}
+
+function _zmx_index_all_actions() (
+    local start=$(date-ms)
+    local base=$1
+    cd $base
+    local index_path=$base/index
+    rm -rf ./index
+    mkdir -p ./index
     echo "start index"
+    local actions_path=$SHELL_ACTIONS_PATH
     for p in $(echo $actions_path| sed "s/:/ /g")
     do
         if [ ! -e "$p" ] ;then
@@ -129,46 +88,136 @@ function zmx-reload-shell-actions() {
         echo index $p $link
         ln -s $p  $index_path/$link
     done
-    echo "end index"
-    # 直接以sh而不是文件夹形式加进来的
-	while IFS= read -r sh_path
-	do
-        echo "add $sh_path"
-        echo "source $sh_path" >> $summary_path
-	done <<< "$(fd -L --glob '*.*sh' $index_path)"
-    echo "end summary"
-	# generated md5
-	fd -L --glob "*.sh" $index_path -x bash -c 'md5=$(md5sum {}| cut -d " " -f 1);p=$(echo {} | sed "s shell-actions shell-actions-md5 " );mkdir -p $(dirname $p) ;echo "$md5 $p.md5"; echo $md5 > $p.md5'
-    echo "end md5 cache"
-    zmx-load-shell-actions
+    local end=$(date-ms)
+    local record="index over, spend $(time-diff-ms "$start" "$end")."
+    echo $record
+    echo $record >> $ZMX_BASE/record
+)
+
+# 生成函数和文件的引用关系
+function _zmx_build_db() (
+    local base=$1
+    local index=$2
+    cd $base
+    echo "start build"
+
+    local start=$(date-ms)
+    rg -L --with-filename --line-number  -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*\{.*$'  -r '${1}' $index |rg '^(.*):(.*):(.*)$' -r '$3   $1   $2' > $base/actions.db
+    # cat  $base/actions.db
+    local end=$(date-ms)
+    local record="build over, spend $(time-diff-ms "$start" "$end")."
+    echo $record
+    echo $record >> $ZMX_BASE/record
+)
+
+function _zmx_gen_import() (
+    echo "start gen import"
+    local start=$(date-ms)
+    local base=$1
+    local db=$2
+    # echo $base $db
+    cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {}" > $base/import.sh
+    local end=$(date-ms)
+    local record="gen-import over, spend $(time-diff-ms "$start" "$end")."
+    echo $record
+    echo $record >> $ZMX_BASE/record
+)
+
+function _zmx_gen_md5() (
+    echo "start gen md5"
+    local start=$(date-ms)
+    local base=$1
+    local db=$2
+    rm -rf $base/md5
+    mkdir $base/md5
+    cd $base/md5
+    echo $base $db
+    cat $db | awk '{print $2}' | sort | uniq | xargs -I {} sh -c 'sp={};md5p=$(echo {} | sed "s|/|_|g");md5=$(md5sum $sp | awk "{print $1}");echo $md5 > ./$md5p.md5'
+    local end=$(date-ms)
+    local record="gen-md5 over, spend $(time-diff-ms "$start" "$end")."
+    echo $record
+    echo $record >> $ZMX_BASE/record
+)
+
+
+function zmx-load-shell-actions() {
+    # local actions_path=$SHELL_ACTIONS_PATH
+    # echo "start load " $actions_path
+    local start=$(date-ms)
+    echo "start source"
+    # echo $actions_path 
+    if [ ! -f $ZMX_BASE/import.sh ]; then
+        echo "no actions found ignore"
+        return
+    fi
+    source $ZMX_BASE/import.sh
+    echo "end source $?"
+    # for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do 
+    #     short=$(echo $action | sed 's/-//g')
+    #     alias $short=$action
+    # done
+    local count=$(count-actions)
+    local end=$(date-ms)
+    local record="load over, count $countspend $(time-diff-ms "$start" "$end")."
+    echo $record
+    echo $record >> $ZMX_BASE/record
 }
 
-function zmx-add-path() {
-	local p=$(readlink -f $1)
-	if [ -z "$p" ]; then
-		echo "empty path"
-		return
-	fi
-	local new_path="export SHELL_ACTIONS_PATH=\$SHELL_ACTIONS_PATH:$p"
-	echo "new_path" $new_path
-	echo "\n$new_path"  >>  ~/.$(hostname).env
-	# make new env work
-	source ~/.loadhome.sh
-	# reload
-	zmx-reload-shell-actions
-	zsh
+
+function edit-x-actions() {
+    local cmd=$(list-x-actions|fzf)
+    local source_file=$(type $cmd|rg -o '.* from (.*)' -r '$1'  |tr -d '\n\r')
+
+    local cmd_start_line=$(grep -no "$cmd()" $source_file |cut -d ':' -f 1 |tr -d '\n\r')
+    echo $source_file
+    echo $cmd_start_line
+    # @keyword: vim edit file in special line
+    vim +$cmd_start_line $source_file
+}
+
+function which-x-actions() {
+    local cmd=$(list-x-actions|fzf)
+    which $cmd
+}
+
+function list-x-actions() {
+    cat $ZMX_BASE/actions.db | awk '{print $1}'
+}
+
+function count-actions() {
+    list-x-actions | wc -l
+}
+
+function _zmx_before_run_action() {
+    local name=$1
 }
 
 function mx() {
-    cmd=$(print -rl ${(k)functions_source[(R)*shell-actions*]} |grep -v _ | fzf)
-    source_file=$(echo $functions_source[$cmd])
-    if grep "$cmd" $source_file -A 1 |grep -q 'arg-len'; then
-        LBUFFER+=$cmd
+    local name=$(list-x-actions | fzf)
+    if [[ $(zmx-action-have-arg $name) == "true" ]]; then
+        _zmx_before_run_action $name
+        LBUFFER+=$name
         LBUFFER+=" "
         zle reset-prompt
     else
-        eval $cmd
+        _zmx_before_run_action $name
+        eval $name
         zle reset-prompt
+    fi
+}
+
+function zmx-actions-info() {
+    local name=$1
+    rg "$name" $ZMX_BASE/actions.db 
+}
+
+function zmx-action-have-arg() {
+    local name=$1
+    read name source_file line <<< $(zmx-actions-info $name)
+    if grep "function\s*$name" $source_file -A 1 |grep -q 'arg-len'; then
+        echo "true"
+    else
+        echo "false"
     fi
 }
 
@@ -200,13 +249,106 @@ function lmx() {
     fi
 }
 
+function zmx-is-full-reload() {
+    if [ -f "$ZMX_BASE/full-reload" ] ;then
+        echo "true"
+        return
+    fi
+        echo "false"
+}
+function zmx-enable-full-reload() {
+    touch $ZMX_BASE/full-reload
+}
+function zmx-disable-full-reload() {
+    rm $ZMX_BASE/full-reload
+}
+
+# may be in dev lopp 
+function _zmx_dev() {
+    if [[ ! "$(zmx-is-full-reload)" == "true" ]]; then
+        return
+    fi
+    echo "force reload"
+    zmx-reload-shell-actions
+}
+
+function zmx_preexec() {
+	# 如果是zmx的action的话，如果是dirty的，先source一下
+	local name=$(echo $1 | awk '{ print $1}')
+	if [[ "$(zmx-is-action $name)" == "false" ]] ; then
+        # TODO may be we juist add a actions?
+        return
+    fi
+
+   _zmx_dev "$@"
+
+    read name source_file line <<< $(zmx-actions-info $name)
+	if [[ "$(zmx-actions-dirty $name)" == "true" ]] ; then
+        echo "action $name dirty, source $source_file"
+		source $source_file
+        zmx-upate-md5 $name
+        return
+	fi
+}
+
+function _zmx_gen_md5p() {
+    local file=$1
+    local md5p="$ZMX_BASE/md5/$(echo $file | sed 's|/|_|g').md5"
+    echo $md5p
+}
+
+function zmx-upate-md5() {
+    local name=$1
+    read name source_file line <<< $(zmx-actions-info $name)
+    local old=$(zmx-cache-md5 $name)
+    local md5p=$(_zmx_gen_md5p $source_file)
+    local md5=$(zmx-cur-md5 $name)
+    # echo $md5 > $md5p
+    local new=$(zmx-cache-md5 $name)
+    echo "update md5 $md5p $md5 $old => $new dirty "
+}
+
+function zmx-is-action() {
+    local name=$1
+    if [ -n "$(rg "^$name" $ZMX_BASE/actions.db)" ] ; then
+        echo "true"
+        return
+    fi
+    echo "false"
+}
+
+function zmx-actions-dirty() {
+    local name=$1
+    local cache=$(zmx-cache-md5 $name)
+    local cur=$(zmx-cur-md5 $name)
+    if [[ "$cache" == "$cur" ]];then
+        echo "false"
+        return
+    fi
+        echo "true"
+}
+
+function zmx-cache-md5() {
+    local name=$1
+    read name source_file line <<< $(zmx-actions-info $name)
+    local md5p="$(echo $source_file | sed 's|/|_|g').md5"
+    local md5=$(cat $ZMX_BASE/md5/$md5p | awk '{print $1 }')
+    echo $md5
+}
+
+function zmx-cur-md5() {
+    local name=$1
+    read name source_file line <<< $(zmx-actions-info $name)
+    local md5=$(md5sum $source_file | awk '{print $1}')
+    echo $md5
+}
+
 function zmx-bind-key() {
     zle -N  mx
     zle -N  lmx
     bindkey ',xx' lmx
     bindkey ',xm' mx
 }
-
 
 function zmx-gen-wapper() {
     mkdir -p ~/.zsh/shell-actions-wapper
@@ -220,4 +362,20 @@ function zmx-gen-wapper() {
         echo init $action $index/$total
         ((index=index+1))
     done
+}
+
+function zmx-add-path() {
+	local p=$(readlink -f $1)
+	if [ -z "$p" ]; then
+		echo "empty path"
+		return
+	fi
+	local new_path="export SHELL_ACTIONS_PATH=\$SHELL_ACTIONS_PATH:$p"
+	echo "new_path" $new_path
+	echo "\n$new_path"  >>  ~/.$(hostname).env
+	# make new env work
+	source ~/.loadhome.sh
+	# reload
+	zmx-reload-shell-actions
+	zsh
 }
