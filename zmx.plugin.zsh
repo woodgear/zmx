@@ -309,7 +309,7 @@ function zmx-upate-md5() {
     local md5=$(zmx-cur-md5 $name)
     echo $md5 > $md5p
     local new=$(zmx-cache-md5 $name)
-    echo "update md5 $md5p $md5 $old => $new dirty "
+    echo "update md5 $md5p $md5 $old => $new" 
 }
 
 function zmx-is-action() {
@@ -335,13 +335,13 @@ function zmx-actions-dirty() {
 function zmx-cache-md5() {
     local name=$1
     read name source_file line <<< $(zmx-actions-info $name)
-    local md5p="$(echo $source_file | sed 's|/|_|g').md5"
+    local md5p=$(_zmx_gen_md5p $source_file)
     # cache中可能没有
     if [ ! -f $md5p ]; then
         echo "empty-cache"
         return
     fi
-    local md5=$(cat $ZMX_BASE/md5/$md5p | awk '{print $1 }')
+    local md5=$(cat $md5p | awk '{print $1 }')
     echo $md5
 }
 
