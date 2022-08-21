@@ -303,7 +303,7 @@ function zmx-upate-md5() {
     local old=$(zmx-cache-md5 $name)
     local md5p=$(_zmx_gen_md5p $source_file)
     local md5=$(zmx-cur-md5 $name)
-    # echo $md5 > $md5p
+    echo $md5 > $md5p
     local new=$(zmx-cache-md5 $name)
     echo "update md5 $md5p $md5 $old => $new dirty "
 }
