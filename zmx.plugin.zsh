@@ -94,6 +94,10 @@ function _zmx_index_all_actions() (
     echo $record >> $ZMX_BASE/record
 )
 
+function _zmx_list_actions_raw() {
+    local index=$1
+    rg -L --with-filename --line-number  -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$'  -r '${1}' $index
+}
 # 生成函数和文件的引用关系
 function _zmx_build_db() (
     local base=$1
@@ -102,8 +106,8 @@ function _zmx_build_db() (
     echo "start build"
 
     local start=$(date-ms)
-    rg -L --with-filename --line-number  -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*\{.*$'  -r '${1}' $index |rg '^(.*):(.*):(.*)$' -r '$3   $1   $2' > $base/actions.db
-    # cat  $base/actions.db
+    _zmx_list_actions_raw $index |rg '^(.*):(.*):(.*)$' -r '$3   $1   $2' > $base/actions.db
+    cat  $base/actions.db
     local end=$(date-ms)
     local record="build over, spend $(time-diff-ms "$start" "$end")."
     echo $record
@@ -158,7 +162,7 @@ function zmx-load-shell-actions() {
     # done
     local count=$(count-actions)
     local end=$(date-ms)
-    local record="load over, count $countspend $(time-diff-ms "$start" "$end")."
+    local record="load over, count $count spend $(time-diff-ms "$start" "$end")."
     echo $record
     echo $record >> $ZMX_BASE/record
 }
@@ -332,6 +336,11 @@ function zmx-cache-md5() {
     local name=$1
     read name source_file line <<< $(zmx-actions-info $name)
     local md5p="$(echo $source_file | sed 's|/|_|g').md5"
+    # cache中可能没有
+    if [ ! -f $md5p ]; then
+        echo "empty-cache"
+        return
+    fi
     local md5=$(cat $ZMX_BASE/md5/$md5p | awk '{print $1 }')
     echo $md5
 }
@@ -339,6 +348,11 @@ function zmx-cache-md5() {
 function zmx-cur-md5() {
     local name=$1
     read name source_file line <<< $(zmx-actions-info $name)
+    # actions.db中可能没有
+    if [[ "$source_file" == "" ]]; then
+        echo "empty-cur"
+        return
+    fi
     local md5=$(md5sum $source_file | awk '{print $1}')
     echo $md5
 }
@@ -378,4 +392,8 @@ function zmx-add-path() {
 	# reload
 	zmx-reload-shell-actions
 	zsh
+}
+
+function zmx-list-path() {
+    env |grep SHELL_ACTIONS_PATH|sed 's/:/\n/g'
 }
