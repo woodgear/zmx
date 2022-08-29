@@ -99,10 +99,11 @@ function _zmx_index_all_actions() (
   echo $record >>$ZMX_BASE/record
 )
 
-function _zmx_list_actions_raw() {
+function zmx-list-actions-raw() {
   local index=$1
-  rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index
+  rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
 }
+
 # 生成函数和文件的引用关系
 function _zmx_build_db() (
   local base=$1
@@ -111,7 +112,7 @@ function _zmx_build_db() (
   echo "start build"
 
   local start=$(date-ms)
-  _zmx_list_actions_raw $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2' >$base/actions.db
+  zmx-list-actions-raw $index > $base/actions.db
   cat $base/actions.db
   local end=$(date-ms)
   local record="build over, spend $(time-diff-ms "$start" "$end")."
