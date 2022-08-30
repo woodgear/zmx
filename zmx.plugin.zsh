@@ -1,6 +1,6 @@
 echo "load zmx"
 
-ZMX_BASE=~/.zmx
+export ZMX_BASE=~/.zmx
 
 function date-ms() {
   date +"%Y %m %e %T.%6N"
@@ -83,6 +83,9 @@ function _zmx_index_all_actions() (
     fi
     local link=$(echo $p | sed 's/\//_/g')
     echo index $p $index_path/$link
+    if [ -e $index_path/$link ]; then
+      rm $index_path/$link
+    fi
     ln -s $p $index_path/$link
     fail="$?"
     if [[ ! "$fail" == "0" ]]; then
@@ -100,7 +103,7 @@ function _zmx_index_all_actions() (
 )
 
 function zmx-list-actions-raw() {
-  local index=$1
+  local index=$ZMX_BASE/index
   rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
 }
 
@@ -112,7 +115,7 @@ function _zmx_build_db() (
   echo "start build"
 
   local start=$(date-ms)
-  zmx-list-actions-raw $index > $base/actions.db
+  zmx-list-actions-raw $index >$base/actions.db
   cat $base/actions.db
   local end=$(date-ms)
   local record="build over, spend $(time-diff-ms "$start" "$end")."
