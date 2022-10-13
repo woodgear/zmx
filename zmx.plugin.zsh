@@ -62,8 +62,9 @@ function zmx-reload-shell-actions() {
   zmx-load-shell-actions
   local end=$(date-ms)
   local record="reload over, spend $(time-diff-ms "$start" "$end")."
+  echo "$record"
   echo $record >>$ZMX_BASE/record
-  cat $ZMX_BASE/record
+#   cat $ZMX_BASE/record
 }
 
 function _zmx_index_all_actions() (
@@ -79,7 +80,7 @@ function _zmx_index_all_actions() (
   for p in $(echo $actions_path | sed "s/:/ /g" | sort | uniq); do
     if [ ! -e "$p" ]; then
       echo "$p not exist "
-      return
+      continue
     fi
     local link=$(echo $p | sed 's/\//_/g')
     echo index $p $index_path/$link
