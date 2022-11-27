@@ -1,3 +1,5 @@
+#!/bin/zsh
+
 echo "load zmx"
 
 export ZMX_BASE=~/.zmx
@@ -23,6 +25,16 @@ function time-diff-ms() {
   )
   echo $output
 }
+
+function zmx-compile() (
+  cd ~/.zmx
+  rm ./aio.sh
+  for p in $(cat ./import.sh | awk '{print $2}' | sort | uniq); do
+    echo "$p"
+    cat $p | grep -v '#!' >>./aio.sh
+  done
+  zcompile ./aio.sh
+)
 
 function zmx-find-base-of-action() {
   local f=$1
@@ -59,12 +71,13 @@ function zmx-reload-shell-actions() {
   _zmx_gen_import $base $base/actions.db
   # will gen a md5 include all source xx under $base/import.sh
   _zmx_gen_md5 $base $base/actions.db
+  _zmx_compile $base
   zmx-load-shell-actions
   local end=$(date-ms)
   local record="reload over, spend $(time-diff-ms "$start" "$end")."
   echo "$record"
   echo $record >>$ZMX_BASE/record
-#   cat $ZMX_BASE/record
+  #   cat $ZMX_BASE/record
 }
 
 function _zmx_index_all_actions() (
@@ -106,6 +119,10 @@ function _zmx_index_all_actions() (
 function zmx-list-actions-raw() {
   local index=$ZMX_BASE/index
   rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
+}
+
+function zmx-list-actions-from-zsh() {
+    print -l ${(k)functions_source[(R)*aio*]}
 }
 
 # 生成函数和文件的引用关系
@@ -163,15 +180,23 @@ function zmx-load-shell-actions() {
     echo "no actions found ignore"
     return
   fi
-  source $ZMX_BASE/import.sh
+
+  if [ -f $ZMX_BASE/aio.sh.zwc ];then
+   echo "load actions from cache"
+   source $ZMX_BASE/aio.sh
+   else
+   echo "load actions from import"
+    source $ZMX_BASE/import.sh
+  fi
   echo "end source $?"
   # for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do
   #     short=$(echo $action | sed 's/-//g')
   #     alias $short=$action
   # done
   local count=$(count-actions)
+  local fn_count=$(zmx-list-actions-from-zsh | wc -l)
   local end=$(date-ms)
-  local record="load over, count $count spend $(time-diff-ms "$start" "$end")."
+  local record="load over, actions db $count $fn_count spend $(time-diff-ms "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 }
