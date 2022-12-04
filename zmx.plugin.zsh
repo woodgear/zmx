@@ -26,7 +26,7 @@ function time-diff-ms() {
   echo $output
 }
 
-function zmx-compile() (
+function _zmx_compile() (
   cd ~/.zmx
   rm ./aio.sh
   for p in $(cat ./import.sh | awk '{print $2}' | sort | uniq); do
