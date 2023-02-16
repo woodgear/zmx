@@ -8,24 +8,6 @@ function date-ms() {
   date +"%Y %m %e %T.%6N"
 }
 
-function time-diff-ms() {
-  local start=$1
-  local end=$2
-
-  local output=$(
-    bash <<-EOF
-	python3 - <<-START
-		from datetime import datetime
-		import humanize
-		start = datetime.strptime("$start","%Y %m %d %H:%M:%S.%f")
-		end = datetime.strptime("$end","%Y %m %d %H:%M:%S.%f")
-		print(humanize.precisedelta(end-start, minimum_unit="microseconds"))
-	START
-	EOF
-  )
-  echo $output
-}
-
 function _zmx_compile() (
   cd ~/.zmx
   rm ./aio.sh
