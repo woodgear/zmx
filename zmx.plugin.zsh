@@ -51,7 +51,7 @@ function zmx-find-path-of-action() {
   if [ -z "$f" ]; then
     f=$(print -l $functrace | head -n 1 | cut -d ':' -f 1)
   fi
-  local p=$(type -a $f | rg -o 'from (.*)$' -r '$1')
+  local p=$(cat ~/.zmx/actions.db |grep $f| awk '{print $2}')
   local p=$(readlink -f $p)
   echo "$p"
 }
