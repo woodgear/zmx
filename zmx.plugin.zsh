@@ -4,31 +4,15 @@ echo "load zmx"
 
 export ZMX_BASE=~/.zmx
 
-function date-ms() {
-  date +"%Y %m %e %T.%6N"
-}
-
-function time-diff-ms() {
-  local start=$1
-  local end=$2
-
-  local output=$(
-    bash <<-EOF
-	python3 - <<-START
-		from datetime import datetime
-		import humanize
-		start = datetime.strptime("$start","%Y %m %d %H:%M:%S.%f")
-		end = datetime.strptime("$end","%Y %m %d %H:%M:%S.%f")
-		print(humanize.precisedelta(end-start, minimum_unit="microseconds"))
-	START
-	EOF
-  )
-  echo $output
+function _date_now() {
+  date +"%Y-%m-%eT%T.%6N"
 }
 
 function _zmx_compile() (
   cd ~/.zmx
-  rm ./aio.sh
+  if [ -f ./aio.sh ]; then
+    rm ./aio.sh
+  fi
   for p in $(cat ./import.sh | awk '{print $2}' | sort | uniq); do
     echo "$p"
     cat $p | grep -v '#!' >>./aio.sh
@@ -61,8 +45,8 @@ function zmx-reload-shell-actions() {
   local actions_path=$SHELL_ACTIONS_PATH
   local base=$ZMX_BASE
   mkdir -p $base
-
-  local start=$(date-ms)
+  local start=$(_date_now)
+  echo $start
   # will link add actions under $base/index
   _zmx_index_all_actions $base
   # will build actions db under $base/action.db from $base/index
@@ -73,15 +57,17 @@ function zmx-reload-shell-actions() {
   _zmx_gen_md5 $base $base/actions.db
   _zmx_compile $base
   zmx-load-shell-actions
-  local end=$(date-ms)
-  local record="reload over, spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  echo $start
+  echo $end
+  local record="reload over, spend $(time-diff "$start" "$end")."
   echo "$record"
   echo $record >>$ZMX_BASE/record
   #   cat $ZMX_BASE/record
 }
 
 function _zmx_index_all_actions() (
-  local start=$(date-ms)
+  local start=$(_date_now)
   local base=$1
   cd $base
   local index_path=$base/index
@@ -106,8 +92,8 @@ function _zmx_index_all_actions() (
       break
     fi
   done
-  local end=$(date-ms)
-  local record="index over, spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  local record="index over, spend $(time-diff "$start" "$end")."
   if [[ ! "$fail" == "0" ]]; then
     echo "sth fail"
     return 1
@@ -132,31 +118,31 @@ function _zmx_build_db() (
   cd $base
   echo "start build"
 
-  local start=$(date-ms)
+  local start=$(_date_now)
   zmx-list-actions-raw $index >$base/actions.db
   cat $base/actions.db
-  local end=$(date-ms)
-  local record="build over, spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  local record="build over, spend $(time-diff "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 )
 
 function _zmx_gen_import() (
   echo "start gen import"
-  local start=$(date-ms)
+  local start=$(_date_now)
   local base=$1
   local db=$2
   # echo $base $db
   cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {}" >$base/import.sh
-  local end=$(date-ms)
-  local record="gen-import over, spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  local record="gen-import over, spend $(time-diff "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 )
 
 function _zmx_gen_md5() (
   echo "start gen md5"
-  local start=$(date-ms)
+  local start=$(_date_now)
   local base=$1
   local db=$2
   rm -rf $base/md5
@@ -164,8 +150,8 @@ function _zmx_gen_md5() (
   cd $base/md5
   echo $base $db
   cat $db | awk '{print $2}' | sort | uniq | xargs -I {} sh -c 'sp={};md5p=$(echo {} | sed "s|/|_|g");md5=$(md5sum $sp | awk "{print $1}");echo $md5 > ./$md5p.md5'
-  local end=$(date-ms)
-  local record="gen-md5 over, spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  local record="gen-md5 over, spend $(time-diff "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 )
@@ -173,7 +159,7 @@ function _zmx_gen_md5() (
 function zmx-load-shell-actions() {
   # local actions_path=$SHELL_ACTIONS_PATH
   # echo "start load " $actions_path
-  local start=$(date-ms)
+  local start=$(_date_now)
   echo "start source"
   # echo $actions_path
   if [ ! -f $ZMX_BASE/import.sh ]; then
@@ -195,8 +181,8 @@ function zmx-load-shell-actions() {
   # done
   local count=$(count-actions)
   local fn_count=$(zmx-list-actions-from-zsh | wc -l)
-  local end=$(date-ms)
-  local record="load over, actions db $count $fn_count spend $(time-diff-ms "$start" "$end")."
+  local end=$(_date_now)
+  local record="load over, actions db $count $fn_count spend $(time-diff "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 }
