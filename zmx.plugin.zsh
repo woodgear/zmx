@@ -406,3 +406,13 @@ function zmx-add-path() {
 function zmx-list-path() {
   echo $SHELL_ACTIONS_PATH | sed $'s/:/\\n/g' | sort | uniq
 }
+
+function zmx-list-current() {
+    fd  '(action.*\.sh|loop.sh)' $PWD
+}
+
+function zmx-load-current() {
+    while read -r line ;do
+        source $line
+    done < <(fd  '(action.*\.sh|loop.sh)' $PWD)
+}
