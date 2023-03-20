@@ -107,6 +107,11 @@ function zmx-list-actions-raw() {
   rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
 }
 
+function zmx-list-actions-stand() {
+  local index=$ZMX_BASE/index
+  rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '@stand-noarg' $index | echo
+}
+
 function zmx-list-actions-from-zsh() {
     print -l ${(k)functions_source[(R)*aio*]}
 }
