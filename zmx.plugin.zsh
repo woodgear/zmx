@@ -134,6 +134,7 @@ function _zmx_gen_import() (
   local db=$2
   # echo $base $db
   cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {}" >$base/import.sh
+  # TODO alias
   local end=$(_date_now)
   local record="gen-import over, spend $(time-diff "$start" "$end")."
   echo $record
@@ -176,8 +177,6 @@ function zmx-load-shell-actions() {
   fi
   echo "end source $?"
   # for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do
-  #     short=$(echo $action | sed 's/-//g')
-  #     alias $short=$action
   # done
   local count=$(count-actions)
   local fn_count=$(zmx-list-actions-from-zsh | wc -l)
@@ -295,6 +294,11 @@ function _zmx_dev() {
   zmx-reload-shell-actions
 }
 
+function _zmx_record() {
+    local ac="$1"
+    local now=$(_date_now)
+    echo "$now $ac" >> ~/.zmx/actions.record
+}
 function zmx_preexec() {
   # 如果是zmx的action的话，如果是dirty的，先source一下
   local name=$(echo $1 | awk '{ print $1}')
@@ -304,6 +308,8 @@ function zmx_preexec() {
   fi
 
   _zmx_dev "$@"
+
+  _zmx_record "$1"
 
   read name source_file line <<<$(zmx-actions-info $name)
   if [[ "$(zmx-actions-dirty $name)" == "true" ]]; then
@@ -395,7 +401,7 @@ function zmx-add-path() {
   fi
   local new_path="export SHELL_ACTIONS_PATH=\$SHELL_ACTIONS_PATH:$p"
   echo "new_path" $new_path
-  echo "\n$new_path" >>~/.$(hostname).env
+  echo "\n$new_path" >>~/.env/.$(hostname).env
   # make new env work
   source ~/.loadhome.sh
   # reload
