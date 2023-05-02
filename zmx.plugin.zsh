@@ -13,10 +13,13 @@ function _zmx_compile() (
   if [ -f ./aio.sh ]; then
     rm ./aio.sh
   fi
+  touch ./aio.sh
   for p in $(cat ./import.sh | awk '{print $2}' | sort | uniq); do
-    echo "$p"
-    cat $p | grep -v '#!' >>./aio.sh
+    echo "zmx compile $p $(file ./aio.sh)"
+    cat "$p" | grep -v '#!' >> ./aio.sh
   done
+  echo "zcompile build "
+  file ~/.zmx/aio.sh
   zcompile ./aio.sh
 )
 
@@ -55,7 +58,7 @@ function zmx-reload-shell-actions() {
   _zmx_gen_import $base $base/actions.db
   # will gen a md5 include all source xx under $base/import.sh
   _zmx_gen_md5 $base $base/actions.db
-  _zmx_compile $base
+#   _zmx_compile $base
   zmx-load-shell-actions
   local end=$(_date_now)
   echo $start
