@@ -5,7 +5,7 @@ echo "load zmx"
 export ZMX_BASE=~/.zmx
 
 function _date_now() {
-  date +"%Y-%m-%eT%T.%6N"
+    date +"%Y-%m-%0eT%T.%6N"
 }
 
 function _zmx_compile() (
