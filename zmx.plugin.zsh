@@ -136,7 +136,7 @@ function _zmx_gen_import() (
   local base=$1
   local db=$2
   # echo $base $db
-  cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {}" >$base/import.sh
+  cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {} || true" >$base/import.sh
   # TODO alias
   local end=$(_date_now)
   local record="gen-import over, spend $(time-diff "$start" "$end")."
