@@ -221,11 +221,13 @@ function mx-with-zle() {
   local name=$(list-x-actions | fzf)
   if [[ $(zmx-action-have-arg $name) == "true" ]]; then
     _zmx_before_run_action $name
+    echo "$name"
   else
     _zmx_before_run_action $name
     eval $name
   fi
 }
+
 function mx() {
   local name=$(list-x-actions | fzf)
   if [[ $(zmx-action-have-arg $name) == "true" ]]; then
