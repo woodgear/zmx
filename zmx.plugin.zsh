@@ -217,7 +217,7 @@ function _zmx_before_run_action() {
   local name=$1
 }
 
-function mx-with-zle() {
+function mx-without-zle() {
   local name=$(list-x-actions | fzf)
   if [[ $(zmx-action-have-arg $name) == "true" ]]; then
     _zmx_before_run_action $name
