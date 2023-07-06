@@ -217,6 +217,15 @@ function _zmx_before_run_action() {
   local name=$1
 }
 
+function mx-with-zle() {
+  local name=$(list-x-actions | fzf)
+  if [[ $(zmx-action-have-arg $name) == "true" ]]; then
+    _zmx_before_run_action $name
+  else
+    _zmx_before_run_action $name
+    eval $name
+  fi
+}
 function mx() {
   local name=$(list-x-actions | fzf)
   if [[ $(zmx-action-have-arg $name) == "true" ]]; then
