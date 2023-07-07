@@ -219,7 +219,10 @@ function _zmx_before_run_action() {
 
 function mx-without-zle() {
   local name=$(list-x-actions | fzf)
-  echo "name -- $name --"
+  if [[ -z "$name" ]]; then
+    echo "canceled"
+    return
+  fi
   if [[ $(zmx-action-have-arg $name) == "true" ]]; then
     _zmx_before_run_action $name
     echo "$name"
