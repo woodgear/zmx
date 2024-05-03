@@ -289,70 +289,11 @@ function lmx() {
   fi
 }
 
-function zmx-is-full-reload() {
-  if [ -f "$ZMX_BASE/full-reload" ]; then
-    echo "true"
-    return
-  fi
-  echo "false"
-}
-function zmx-enable-full-reload() {
-  touch $ZMX_BASE/full-reload
-}
-function zmx-disable-full-reload() {
-  rm $ZMX_BASE/full-reload
-}
-
-# may be in dev lopp
-function _zmx_dev() {
-  if [[ ! "$(zmx-is-full-reload)" == "true" ]]; then
-    return
-  fi
-  echo "force reload"
-  zmx-reload-shell-actions
-}
-
+# 
 function _zmx_record() {
     local ac="$1"
     local now=$(_date_now)
     echo "$now $ac" >> ~/.zmx/actions.record
-}
-function zmx_preexec() {
-  # 如果是zmx的action的话，如果是dirty的，先source一下
-  local name=$(echo $1 | awk '{ print $1}')
-  if [[ "$(zmx-is-action $name)" == "false" ]]; then
-    # TODO may be we juist add a actions?
-    return
-  fi
-
-  _zmx_dev "$@"
-
-  _zmx_record "$1"
-
-  read name source_file line <<<$(zmx-actions-info $name)
-  if [[ "$(zmx-actions-dirty $name)" == "true" ]]; then
-    echo "action $name dirty, source $source_file"
-    source $source_file
-    zmx-upate-md5 $name
-    return
-  fi
-}
-
-function _zmx_gen_md5p() {
-  local file=$1
-  local md5p="$ZMX_BASE/md5/$(echo $file | sed 's|/|_|g').md5"
-  echo $md5p
-}
-
-function zmx-upate-md5() {
-  local name=$1
-  read name source_file line <<<$(zmx-actions-info $name)
-  local old=$(zmx-cache-md5 $name)
-  local md5p=$(_zmx_gen_md5p $source_file)
-  local md5=$(zmx-cur-md5 $name)
-  echo $md5 >$md5p
-  local new=$(zmx-cache-md5 $name)
-  echo "update md5 $md5p $md5 $old => $new"
 }
 
 function zmx-is-action() {
@@ -364,41 +305,33 @@ function zmx-is-action() {
   echo "false"
 }
 
-function zmx-actions-dirty() {
-  local name=$1
-  local cache=$(zmx-cache-md5 $name)
-  local cur=$(zmx-cur-md5 $name)
-  if [[ "$cache" == "$cur" ]]; then
-    echo "false"
+function zmx_preexec() {
+  # 如果是zmx的action的话，如果是dirty的，先source一下
+  local name=$(echo $1 | awk '{ print $1}')
+  if [[ "$(zmx-is-action $name)" == "false" ]]; then
+    # TODO may be we juist add a actions?
     return
   fi
-  echo "true"
+  read name source_file line <<<$(zmx-actions-info $name)
+  if [[ -n "$source_file" ]];then
+  echo "$(_date_now) $1" >> ~/.zmx/actions.record
+  # 在source 一下 这样基本就能满足很多场景了
+  source $source_file
+  fi
+
+#   _zmx_dev "$@"
+
+#   _zmx_record "$1"
+
+#   if [[ "$(zmx-actions-dirty $name)" == "true" ]]; then
+#     echo "action $name dirty, source $source_file"
+#     source $source_file
+#     zmx-upate-md5 $name
+#     return
+#   fi
 }
 
-function zmx-cache-md5() {
-  local name=$1
-  read name source_file line <<<$(zmx-actions-info $name)
-  local md5p=$(_zmx_gen_md5p $source_file)
-  # cache中可能没有
-  if [ ! -f $md5p ]; then
-    echo "empty-cache"
-    return
-  fi
-  local md5=$(cat $md5p | awk '{print $1 }')
-  echo $md5
-}
 
-function zmx-cur-md5() {
-  local name=$1
-  read name source_file line <<<$(zmx-actions-info $name)
-  # actions.db中可能没有
-  if [[ "$source_file" == "" ]]; then
-    echo "empty-cur"
-    return
-  fi
-  local md5=$(md5sum $source_file | awk '{print $1}')
-  echo $md5
-}
 
 function zmx-bind-key() {
   zle -N mx
@@ -431,12 +364,7 @@ function zmx-list-path() {
   echo $SHELL_ACTIONS_PATH | sed $'s/:/\\n/g' | sort | uniq
 }
 
-function zmx-list-current() {
-    fd  '(action.*\.sh|loop.sh)' $PWD
-}
 
-function zmx-load-current() {
-    while read -r line ;do
-        source $line
-    done < <(fd  '(action.*\.sh|loop.sh)' $PWD)
+function zmx-show-recocds() {
+    cat ~/.zmx/actions.record
 }
