@@ -309,13 +309,14 @@ function zmx_preexec() {
   # 如果是zmx的action的话，如果是dirty的，先source一下
   local name=$(echo $1 | awk '{ print $1}')
   if [[ "$(zmx-is-action $name)" == "false" ]]; then
-    # TODO may be we juist add a actions?
+    # TODO may be we just add a actions?
     return
   fi
   read name source_file line <<<$(zmx-actions-info $name)
   if [[ -n "$source_file" ]];then
   echo "$(_date_now) $1" >> ~/.zmx/actions.record
   # 在source 一下 这样基本就能满足很多场景了
+  local source_file=$(readlink -f $source_file)
   source $source_file
   fi
 
