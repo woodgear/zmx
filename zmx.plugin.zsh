@@ -1,7 +1,4 @@
 #!/bin/zsh
-
-echo "load zmx"
-
 export ZMX_BASE=~/.zmx
 
 function _date_now() {
