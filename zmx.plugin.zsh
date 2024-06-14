@@ -293,14 +293,14 @@ function _zmx_record() {
     echo "$now $ac" >> ~/.zmx/actions.record
 }
 
-function zmx-is-action() {
+function zmx-is-action() (
   local name=$1
-  if [ -n "$(rg "^$name" $ZMX_BASE/actions.db 2>/dev/null)"]; then
+  if [ -n "$(rg "^$name" $ZMX_BASE/actions.db 2>/dev/null)" ]; then
     echo "true"
     return
   fi
   echo "false"
-}
+)
 
 function zmx_preexec() {
   # 如果是zmx的action的话，如果是dirty的，先source一下
