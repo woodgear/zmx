@@ -295,7 +295,7 @@ function _zmx_record() {
 
 function zmx-is-action() {
   local name=$1
-  if [ -n "$(rg "^$name" $ZMX_BASE/actions.db)" ]; then
+  if [ -n "$(rg "^$name" $ZMX_BASE/actions.db 2>/dev/null)"]; then
     echo "true"
     return
   fi
