@@ -157,6 +157,14 @@ function _zmx_gen_md5() (
   echo $record >>$ZMX_BASE/record
 )
 
+function time-diff_() {
+    if which time-diff > /dev/null ;then 
+        time-diff $@
+    else
+        return ""
+    fi
+}
+
 function zmx-load-shell-actions() {
   # local actions_path=$SHELL_ACTIONS_PATH
   # echo "start load " $actions_path
@@ -181,7 +189,7 @@ function zmx-load-shell-actions() {
   local count=$(count-actions)
   local fn_count=$(zmx-list-actions-from-zsh | wc -l)
   local end=$(_date_now)
-  local record="load over, actions-db-fn $count zsh-fn $fn_count spend $(time-diff "$start" "$end")."
+  local record="load over, actions-db-fn $count zsh-fn $fn_count spend $(time-diff_ "$start" "$end")."
   echo $record
   echo $record >>$ZMX_BASE/record
 }
