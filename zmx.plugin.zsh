@@ -165,6 +165,14 @@ function time-diff_() {
     fi
 }
 
+function zmx-log() {
+    echo "$(_date_now) $@" >>$ZMX_BASE/.zmx.log
+}
+
+function zmx-watch-log() {
+    tail -F $ZMX_BASE/.zmx.log
+}
+
 function zmx-load-shell-actions() {
   # local actions_path=$SHELL_ACTIONS_PATH
   # echo "start load " $actions_path
