@@ -391,3 +391,18 @@ function zmx-select() (
   fzf
   return
 )
+
+function zmx-get-input() (
+  local prompt=${1-"name: "}
+  if [ -n "$2" ]; then
+    echo "$2"
+    return
+  fi
+  if [ -n "$IN_ROFI" ]; then
+    echo $(zenity --entry --text="$prompt")
+    return
+  fi
+  a=$(bash -c "read -e -p \"$prompt\" tmp; echo \$tmp")
+  echo $a
+  return
+)
