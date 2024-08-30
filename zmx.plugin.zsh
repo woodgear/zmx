@@ -382,3 +382,12 @@ function zmx-list-path() {
 function zmx-show-recocds() {
     cat ~/.zmx/actions.record
 }
+
+function zmx-select() (
+  if [[ -n "$IN_ROFI" ]]; then
+    rofi -dpi 1 -dmenu
+    return
+  fi
+  fzf
+  return
+)
