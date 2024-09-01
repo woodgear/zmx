@@ -49,6 +49,8 @@ function zmx-reload-shell-actions() {
   echo $start
   # will link add actions under $base/index
   _zmx_index_all_actions $base
+  # run auto gen command first 
+  _zmx_autogen $base
   # will build actions db under $base/action.db from $base/index
   _zmx_build_db $base $base/index
   # will gen a sh include all source xx under $base/import.sh
@@ -101,6 +103,14 @@ function _zmx_index_all_actions() (
   echo $record
   echo $record >>$ZMX_BASE/record
 )
+
+function _zmx_autogen() (
+  for p in $(echo $ZMX_GEN_PATH | sed "s/:/ /g" | sort | uniq); do
+    echo "gen $p"
+    $p
+  done
+)
+
 
 function zmx-list-actions-raw() {
   local index=$ZMX_BASE/index

@@ -18,5 +18,5 @@ load_shell_actions $SHELL_ACTIONS_PATH
 ## how to use
 1. dealut bindkey is  `,xm`.
 2. action come from script which file path in SHELL_ACTIONS_PATH.
-## annotation
-1. @arg-len action(function) which has comment like '# @arg-len:1' will not eval but wait you args.
+## feature
+1. source before eval aciton (add zmx_preexec to preexec hook)
