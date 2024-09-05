@@ -370,7 +370,7 @@ function zmx-add-path() {
     echo "empty path"
     return
   fi
-  if [ $(zmx-list-path | grep "$p") ]; then
+  if [ $(zmx-list-path | grep -F "$p") ]; then
     echo "already have"
     return 1
   fi
