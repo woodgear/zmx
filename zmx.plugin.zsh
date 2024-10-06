@@ -340,7 +340,9 @@ function zmx_preexec() {
   echo "$(_date_now) $1" >> ~/.zmx/actions.record
   # 在source 一下 这样基本就能满足很多场景了
   local source_file=$(readlink -f $source_file)
-  source $source_file
+  if [[ -n "$source_file" ]];then
+    source $source_file
+  fi
   fi
 
 #   _zmx_dev "$@"
