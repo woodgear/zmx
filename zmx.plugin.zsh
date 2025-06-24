@@ -418,3 +418,22 @@ function zmx-get-input() (
   echo $a
   return
 )
+
+function zmx-auto-source() {
+  echo "auto source loop.sh"
+  while read -r file; do
+    if [[ -z "$file" ]]; then
+      continue
+    fi
+    echo "source $file"
+    source $file
+  done <<< "$(fd -a --follow --no-ignore loop.sh)"
+    echo "auto source actions.sh"
+  while read -r file; do
+    if [[ -z "$file" ]]; then
+      continue
+    fi
+    echo "source $file"
+    source $file
+  done <<< "$(fd -a --follow --no-ignore actions.sh)"
+}
