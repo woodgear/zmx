@@ -5,6 +5,38 @@ function _date_now() {
     date +"%Y-%m-%0eT%T.%6N"
 }
 
+
+function zmx-gen-tools() (
+    local filter=$1
+    while read line;do
+        echo "- $line- "
+        local action=$(echo "$line"|awk '{print $1}')
+        local code=$(cat <<EOF
+#!/bin/bash
+/home/cong/sm/project/zmx/zmx-call.sh $action
+EOF
+)
+        echo "$code"  > ~/.zmx/tools/$action.sh
+        chmod a+x ~/.zmx/tools/$action.sh
+    done <  <(cat ~/.zmx/actions.db|grep $filter)
+)
+
+function zmx-gen-tools-all() (
+    rm -rf ~/.zmx/tools
+    mkdir -p ~/.zmx/tools
+    while read line;do
+        echo "- $line- "
+        local action=$(echo "$line"|awk '{print $1}')
+        local code=$(cat <<EOF
+#!/bin/bash
+/home/cong/sm/project/zmx/zmx-call.sh $action
+EOF
+)
+        echo "$code"  > ~/.zmx/tools/$action.sh
+        chmod a+x ~/.zmx/tools/$action.sh
+    done <  <(cat ~/.zmx/actions.db)
+)
+
 function _zmx_compile() (
   cd ~/.zmx
   if [ -f ./aio.sh ]; then
