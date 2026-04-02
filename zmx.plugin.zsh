@@ -149,8 +149,34 @@ function zmx-list-actions-raw() {
   rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
 }
 
+function zmx-list() {
+  cat ~/.zmx/actions.db | awk '{print $1}'
+}
+
 function zmx-list-actions-from-zsh() {
-    print -l ${(k)functions_source[(R)*aio*]}
+   print -l ${(k)functions_source[(R)*aio*]}
+}
+
+function zmx-help() {
+  local f=${1-$(zmx-list|fzf)}
+  if [[ -z "$f" ]]; then
+    echo "no function selected"
+    return 1
+  fi
+
+  echo "Function: $f"
+  echo ""
+
+  # 提取 @@@ 之间的帮助文本
+  local help_text=$(which $f | sed -n '/^@@@$/,/^@@@$/p' | sed '1d;$d')
+
+  if [[ -n "$help_text" ]]; then
+    echo "$help_text"
+  else
+    echo "No help documentation found"
+    echo ""
+    which $f
+  fi
 }
 
 # 生成函数和文件的引用关系
