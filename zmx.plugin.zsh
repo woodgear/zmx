@@ -5,9 +5,33 @@ function _date_now() {
     date +"%Y-%m-%0eT%T.%6N"
 }
 
+function _zmx_tools_dir() {
+    echo "$ZMX_BASE/tools"
+}
+
+function _zmx_runtime_call_target() {
+    local plugin_file=${functions_source[_zmx_runtime_call_target]}
+    local plugin_dir=$(cd "$(dirname "$plugin_file")" && pwd)
+    echo "$plugin_dir/zmx-call.sh"
+}
+
+function _zmx_ensure_runtime_tools() {
+    local tools_dir=$(_zmx_tools_dir)
+    local target=$(_zmx_runtime_call_target)
+
+    mkdir -p "$ZMX_BASE" "$tools_dir"
+    cat >"$tools_dir/zmx-call" <<EOF
+#!/bin/bash
+exec "$target" "\$@"
+EOF
+    chmod a+x "$tools_dir/zmx-call"
+    ln -sf "$tools_dir/zmx-call" "$tools_dir/zmx-call.sh"
+}
+
 
 function zmx-gen-tools() (
     local filter=$1
+    _zmx_ensure_runtime_tools
     while read line;do
         echo "- $line- "
         local action=$(echo "$line"|awk '{print $1}')
@@ -23,7 +47,7 @@ EOF
 
 function zmx-gen-tools-all() (
     rm -rf ~/.zmx/tools
-    mkdir -p ~/.zmx/tools
+    _zmx_ensure_runtime_tools
     while read line;do
         echo "- $line- "
         local action=$(echo "$line"|awk '{print $1}')
@@ -77,6 +101,7 @@ function zmx-reload-shell-actions() {
   local actions_path=$SHELL_ACTIONS_PATH
   local base=$ZMX_BASE
   mkdir -p $base
+  _zmx_ensure_runtime_tools
   local start=$(_date_now)
   echo $start
   # will link add actions under $base/index
@@ -245,6 +270,7 @@ function zmx-load-shell-actions() {
   # local actions_path=$SHELL_ACTIONS_PATH
   # echo "start load " $actions_path
   local start=$(_date_now)
+  _zmx_ensure_runtime_tools
   echo "start source"
   # echo $actions_path
   if [ ! -f $ZMX_BASE/import.sh ]; then
