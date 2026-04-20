@@ -199,12 +199,6 @@ function zmx-reload-shell-actions() {
   local start=$(_date_now)
   local call_target=$(_zmx_runtime_call_target)
 
-  echo "action path $SHELL_ACTIONS_PATH"
-  if ! command -v zmx >/dev/null 2>&1; then
-    echo "missing zmx command in PATH"
-    return 1
-  fi
-
   zmx reload --base "$base" --actions-path "$SHELL_ACTIONS_PATH" --gen-path "$ZMX_GEN_PATH" --call-target "$call_target" || return
   if _zmx_compiled_cache_enabled; then
     if ! _zmx_compile; then
