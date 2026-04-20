@@ -1,5 +1,5 @@
 #!/bin/zsh
-export ZMX_BASE=~/.zmx
+export ZMX_BASE=${ZMX_BASE:-$HOME/.zmx}
 
 function _date_now() {
     date +"%Y-%m-%0eT%T.%6N"
@@ -9,10 +9,14 @@ function _zmx_tools_dir() {
     echo "$ZMX_BASE/tools"
 }
 
-function _zmx_runtime_call_target() {
-    local plugin_file=${functions_source[_zmx_runtime_call_target]}
+function _zmx_plugin_dir() {
+    local plugin_file=${functions_source[_zmx_plugin_dir]}
     local plugin_dir=$(cd "$(dirname "$plugin_file")" && pwd)
-    echo "$plugin_dir/zmx-call.sh"
+    echo "$plugin_dir"
+}
+
+function _zmx_runtime_call_target() {
+    echo "$(_zmx_plugin_dir)/zmx-call.sh"
 }
 
 function _zmx_ensure_runtime_tools() {
@@ -28,6 +32,12 @@ EOF
     ln -sf "$tools_dir/zmx-call" "$tools_dir/zmx-call.sh"
 }
 
+
+function _zmx_append_record() {
+  local record="$1"
+  echo "$record"
+  echo "$record" >>"$ZMX_BASE/record"
+}
 
 function zmx-gen-tools() (
     local filter=$1
@@ -61,19 +71,107 @@ EOF
     done <  <(cat ~/.zmx/actions.db)
 )
 
-function _zmx_compile() (
-  cd ~/.zmx
-  if [ -f ./aio.sh ]; then
-    rm ./aio.sh
+function _zmx_import_sources() {
+  local import_file=${1:-$ZMX_BASE/import.sh}
+  if [[ ! -f "$import_file" ]]; then
+    return 1
   fi
-  touch ./aio.sh
-  for p in $(cat ./import.sh | awk '{print $2}' | sort | uniq); do
-    echo "zmx compile $p $(file ./aio.sh)"
-    cat "$p" | grep -v '#!' >> ./aio.sh
-  done
-  echo "zcompile build "
-  file ~/.zmx/aio.sh
-  zcompile ./aio.sh
+
+  awk '$1 == "source" && !seen[$2]++ { print $2 }' "$import_file"
+}
+
+function _zmx_invalidate_compiled_cache() {
+  rm -f "$ZMX_BASE/aio.sh" "$ZMX_BASE/aio.sh.zwc"
+}
+
+function _zmx_compiled_cache_enabled() {
+  case "${ZMX_ENABLE_COMPILED_CACHE:-0:l}" in
+    1|true|yes|on)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+function _zmx_compiled_cache_fresh() {
+  local import_file="$ZMX_BASE/import.sh"
+  local aio_file="$ZMX_BASE/aio.sh"
+  local cache_file="$aio_file.zwc"
+  local source_file
+
+  if [[ ! -f "$import_file" || ! -f "$aio_file" || ! -f "$cache_file" ]]; then
+    return 1
+  fi
+
+  if [[ "$import_file" -nt "$aio_file" || "$import_file" -nt "$cache_file" || "$aio_file" -nt "$cache_file" ]]; then
+    return 1
+  fi
+
+  while read -r source_file; do
+    if [[ -z "$source_file" ]]; then
+      continue
+    fi
+    if [[ ! -f "$source_file" || "$source_file" -nt "$cache_file" ]]; then
+      return 1
+    fi
+  done < <(_zmx_import_sources "$import_file")
+}
+
+function _zmx_compile() (
+  local base="${ZMX_BASE:-$HOME/.zmx}"
+  local import_file="$base/import.sh"
+  local target_file="$base/aio.sh"
+  local target_cache="$target_file.zwc"
+  local temp_file="$target_file.tmp.$$"
+  local temp_cache="$temp_file.zwc"
+  local source_file
+  local appended=0
+
+  if [[ ! -f "$import_file" ]]; then
+    echo "missing import file: $import_file"
+    return 1
+  fi
+
+  echo "build compiled action cache"
+  rm -f "$temp_file" "$temp_cache"
+  : > "$temp_file" || return 1
+
+  while read -r source_file; do
+    if [[ -z "$source_file" ]]; then
+      continue
+    fi
+    if [[ ! -f "$source_file" ]]; then
+      echo "skip missing source $source_file"
+      continue
+    fi
+
+    sed '1{/^#!/d;}' "$source_file" >> "$temp_file" || return 1
+    printf '\n' >> "$temp_file" || return 1
+    (( appended++ ))
+  done < <(_zmx_import_sources "$import_file")
+
+  if [[ "$appended" -eq 0 ]]; then
+    rm -f "$temp_file"
+    echo "no source files compiled"
+    return 1
+  fi
+
+  if ! zcompile "$temp_file"; then
+    rm -f "$temp_file" "$temp_cache"
+    return 1
+  fi
+
+  mv "$temp_file" "$target_file" || {
+    rm -f "$temp_file" "$temp_cache"
+    return 1
+  }
+
+  mv "$temp_cache" "$target_cache" || {
+    rm -f "$target_file" "$temp_file" "$temp_cache"
+    return 1
+  }
+
+  echo "compiled action cache ready ($appended files)"
 )
 
 function zmx-find-base-of-action() {
@@ -91,87 +189,34 @@ function zmx-find-path-of-action() {
   if [ -z "$f" ]; then
     f=$(print -l $functrace | head -n 1 | cut -d ':' -f 1)
   fi
-  local p=$(cat ~/.zmx/actions.db |grep $f| awk '{print $2}')
-  local p=$(readlink -f $p)
+  local p=$(awk -v name="$f" '$1 == name { print $2; exit }' "$ZMX_BASE/actions.db")
+  local p=$(readlink -f "$p")
   echo "$p"
 }
 
 function zmx-reload-shell-actions() {
-  echo "action path" $SHELL_ACTIONS_PATH
-  local actions_path=$SHELL_ACTIONS_PATH
-  local base=$ZMX_BASE
-  mkdir -p $base
-  _zmx_ensure_runtime_tools
+  local base="$ZMX_BASE"
   local start=$(_date_now)
-  echo $start
-  # will link add actions under $base/index
-  _zmx_index_all_actions $base
-  # run auto gen command first 
-  _zmx_autogen $base
-  # will build actions db under $base/action.db from $base/index
-  _zmx_build_db $base $base/index
-  # will gen a sh include all source xx under $base/import.sh
-  _zmx_gen_import $base $base/actions.db
-  # will gen a md5 include all source xx under $base/import.sh
-  _zmx_gen_md5 $base $base/actions.db
-#   _zmx_compile $base
-  zmx-load-shell-actions
-  local end=$(_date_now)
-  echo $start
-  echo $end
-  local record="reload over, spend $(time-diff "$start" "$end")."
-  echo "$record"
-  echo $record >>$ZMX_BASE/record
-  #   cat $ZMX_BASE/record
-}
+  local call_target=$(_zmx_runtime_call_target)
 
-function _zmx_index_all_actions() (
-  local start=$(_date_now)
-  local base=$1
-  cd $base
-  local index_path=$base/index
-  rm -rf ./index
-  mkdir -p ./index
-  echo "start index"
-  local actions_path=$SHELL_ACTIONS_PATH
-  local fail="0"
-  for p in $(echo $actions_path | sed "s/:/ /g" | sort | uniq); do
-    if [ ! -e "$p" ]; then
-      echo "$p not exist "
-      continue
-    fi
-    local link=$(echo $p | sed 's/\//_/g')
-    echo index $p $index_path/$link
-    if [ -e $index_path/$link ]; then
-      rm $index_path/$link
-    fi
-    ln -s $p $index_path/$link
-    fail="$?"
-    if [[ ! "$fail" == "0" ]]; then
-      break
-    fi
-  done
-  local end=$(_date_now)
-  local record="index over, spend $(time-diff "$start" "$end")."
-  if [[ ! "$fail" == "0" ]]; then
-    echo "sth fail"
+  echo "action path $SHELL_ACTIONS_PATH"
+  if ! command -v zmx >/dev/null 2>&1; then
+    echo "missing zmx command in PATH"
     return 1
   fi
-  echo $record
-  echo $record >>$ZMX_BASE/record
-)
 
-function _zmx_autogen() (
-  for p in $(echo $ZMX_GEN_PATH | sed "s/:/ /g" | sort | uniq); do
-    echo "gen $p"
-    $p
-  done
-)
+  zmx reload --base "$base" --actions-path "$SHELL_ACTIONS_PATH" --gen-path "$ZMX_GEN_PATH" --call-target "$call_target" || return
+  if _zmx_compiled_cache_enabled; then
+    if ! _zmx_compile; then
+      echo "compiled cache unavailable, fallback to import"
+      _zmx_invalidate_compiled_cache
+    fi
+  fi
+  zmx-load-shell-actions || return
 
-
-function zmx-list-actions-raw() {
-  local index=$ZMX_BASE/index
-  rg -L --with-filename --line-number -g '*.{sh,bash,zsh}' '^function\s*([^\s()_]+).*[\(\{][^\}\)]*$' -r '${1}' $index | rg '^(.*):(.*):(.*)$' -r '$3   $1   $2'
+  local end=$(_date_now)
+  local record="reload over, spend $(time-diff_ "$start" "$end")."
+  _zmx_append_record "$record"
 }
 
 function zmx-list() {
@@ -179,7 +224,30 @@ function zmx-list() {
 }
 
 function zmx-list-actions-from-zsh() {
-   print -l ${(k)functions_source[(R)*aio*]}
+   local fn
+   local i
+   local source_file
+   local -a function_items
+   local -A allowed_sources
+
+   if _zmx_compiled_cache_enabled && [[ -f "$ZMX_BASE/aio.sh" ]]; then
+     allowed_sources[$ZMX_BASE/aio.sh]=1
+   fi
+
+   while read -r source_file; do
+     if [[ -n "$source_file" ]]; then
+       allowed_sources[$source_file]=1
+     fi
+   done < <(_zmx_import_sources)
+
+   function_items=("${(@kv)functions_source}")
+   for (( i = 1; i <= ${#function_items}; i += 2 )); do
+     fn=${function_items[i]}
+     source_file=${function_items[i + 1]}
+     if [[ -n "${allowed_sources[$source_file]}" ]]; then
+       print -- "$fn"
+     fi
+   done | sort -u
 }
 
 function zmx-help() {
@@ -193,68 +261,15 @@ function zmx-help() {
   echo ""
 
   # 提取 @@@ 之间的帮助文本
-  local help_text=$(which $f | sed -n '/^@@@$/,/^@@@$/p' | sed '1d;$d')
-
-  if [[ -n "$help_text" ]]; then
-    echo "$help_text"
-  else
-    echo "No help documentation found"
-    echo ""
-    which $f
-  fi
+  local help_text=$(which "$f" | sed -n '/^@@@$/,/^@@@$/p' | sed '1d;$d')
+  echo "$help_text"
 }
 
-# 生成函数和文件的引用关系
-function _zmx_build_db() (
-  local base=$1
-  local index=$2
-  cd $base
-  echo "start build"
-
-  local start=$(_date_now)
-  zmx-list-actions-raw $index >$base/actions.db
-  cat $base/actions.db
-  local end=$(_date_now)
-  local record="build over, spend $(time-diff "$start" "$end")."
-  echo $record
-  echo $record >>$ZMX_BASE/record
-)
-
-function _zmx_gen_import() (
-  echo "start gen import"
-  local start=$(_date_now)
-  local base=$1
-  local db=$2
-  # echo $base $db
-  cat $db | awk '{print $2}' | sort | uniq | xargs -I {} echo "source {} || true" >$base/import.sh
-  # TODO alias
-  local end=$(_date_now)
-  local record="gen-import over, spend $(time-diff "$start" "$end")."
-  echo $record
-  echo $record >>$ZMX_BASE/record
-)
-
-function _zmx_gen_md5() (
-  echo "start gen md5"
-  local start=$(_date_now)
-  local base=$1
-  local db=$2
-  rm -rf $base/md5
-  mkdir $base/md5
-  cd $base/md5
-  echo $base $db
-  cat $db | awk '{print $2}' | sort | uniq | xargs -I {} sh -c 'sp={};md5p=$(echo {} | sed "s|/|_|g");md5=$(md5sum $sp | awk "{print $1}");echo $md5 > ./$md5p.md5'
-  local end=$(_date_now)
-  local record="gen-md5 over, spend $(time-diff "$start" "$end")."
-  echo $record
-  echo $record >>$ZMX_BASE/record
-)
-
 function time-diff_() {
-    if which time-diff > /dev/null ;then 
-        time-diff $@
+    if command -v time-diff >/dev/null 2>&1; then
+        time-diff "$@"
     else
-        return ""
+        echo "n/a"
     fi
 }
 
@@ -267,33 +282,40 @@ function zmx-watch-log() {
 }
 
 function zmx-load-shell-actions() {
-  # local actions_path=$SHELL_ACTIONS_PATH
-  # echo "start load " $actions_path
   local start=$(_date_now)
-  _zmx_ensure_runtime_tools
+
+  _zmx_ensure_runtime_tools || return
   echo "start source"
-  # echo $actions_path
-  if [ ! -f $ZMX_BASE/import.sh ]; then
+  if [[ ! -f "$ZMX_BASE/import.sh" ]]; then
     echo "no actions found ignore"
     return
   fi
 
-  if [ -f $ZMX_BASE/aio.sh.zwc ];then
-   echo "load actions from cache"
-   source $ZMX_BASE/aio.sh
-   else
-   echo "load actions from import"
-    source $ZMX_BASE/import.sh
+  if _zmx_compiled_cache_enabled; then
+    if ! _zmx_compiled_cache_fresh; then
+      echo "compiled cache stale, rebuild"
+      _zmx_invalidate_compiled_cache
+      if ! _zmx_compile; then
+        echo "compiled cache unavailable, fallback to import"
+        _zmx_invalidate_compiled_cache
+      fi
+    fi
+  fi
+
+  if _zmx_compiled_cache_enabled && _zmx_compiled_cache_fresh; then
+    echo "load actions from cache"
+    source "$ZMX_BASE/aio.sh"
+  else
+    echo "load actions from import"
+    source "$ZMX_BASE/import.sh"
   fi
   echo "end source $?"
-  # for action in $(print -rl ${(k)functions_source[(R)*shell-actions*]});do
-  # done
+
   local count=$(count-actions)
   local fn_count=$(zmx-list-actions-from-zsh | wc -l)
   local end=$(_date_now)
   local record="load over, actions-db-fn $count zsh-fn $fn_count spend $(time-diff_ "$start" "$end")."
-  echo $record
-  echo $record >>$ZMX_BASE/record
+  _zmx_append_record "$record"
 }
 
 function edit-x-actions() {
@@ -353,19 +375,25 @@ function mx() {
   fi
 }
 
-function zmx-actions-info() {
-  local name=$1
-  rg "$name" $ZMX_BASE/actions.db
-}
 
-function zmx-action-have-arg() {
-  local name=$1
-  read name source_file line <<<$(zmx-actions-info $name)
-  if grep "function\s*$name" $source_file -A 1 | grep -q 'arg-len'; then
-    echo "true"
-  else
-    echo "false"
+function zmx-actions-info() {
+  local spec_doc='
+@@@
+name: zmx-actions-info
+summary: Show the raw registry row for an indexed action
+
+arg action | required | desc=Action name
+@@@
+'
+
+  if shellargs is-help -- "$@"; then
+    shellargs help --spec "$spec_doc"
+    return
   fi
+
+  local parsed=$(shellargs parse --spec "$spec_doc" -- "$@") || return
+  local name=$(jq -r '.action' <<<"$parsed") || return
+  awk -v name="$name" '$1 == name { print; exit }' "$ZMX_BASE/actions.db"
 }
 
 function lmx() {
@@ -405,7 +433,7 @@ function _zmx_record() {
 
 function zmx-is-action() (
   local name=$1
-  if [ -n "$(rg "^$name" $ZMX_BASE/actions.db 2>/dev/null)" ]; then
+  if awk -v name="$name" '$1 == name { found = 1; exit } END { exit found ? 0 : 1 }' "$ZMX_BASE/actions.db" 2>/dev/null; then
     echo "true"
     return
   fi

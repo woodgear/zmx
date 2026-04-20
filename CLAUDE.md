@@ -31,15 +31,21 @@ The runtime state lives in `~/.zmx/`.
 
 ## How Discovery Works
 
-### 1. Index action paths
+### 1. Reload orchestration
 
-`_zmx_index_all_actions` creates symlinks under `~/.zmx/index/` for every directory in `SHELL_ACTIONS_PATH`.
+`zmx-reload-shell-actions` is now a shell wrapper around the Go binary `cmd/zmx`.
+
+The binary handles the generation pipeline. The shell wrapper still performs the final `source ~/.zmx/import.sh` step because a child process cannot mutate the parent shell.
+
+### 2. Index action paths
+
+`zmx reload` creates symlinks under `~/.zmx/index/` for every directory in `SHELL_ACTIONS_PATH`.
 
 This gives zmx a stable local view of all configured action sources.
 
-### 2. Build the action database
+### 3. Build the action database
 
-`_zmx_build_db` scans indexed files with ripgrep and writes `~/.zmx/actions.db`.
+`zmx reload` scans indexed shell files and writes `~/.zmx/actions.db`.
 
 Database format:
 ```text
@@ -48,17 +54,13 @@ function_name source_file line_number
 
 This file is the main registry for discovering and locating actions.
 
-### 3. Generate imports
+The scan keeps the current ripgrep-compatible behavior, including its name-truncation edge cases for function names containing `_`.
 
-`_zmx_gen_import` builds `~/.zmx/import.sh`, which sources all unique action files.
+### 4. Generate imports and hashes
 
-This allows zmx to load the action set into the current shell.
+`zmx reload` builds `~/.zmx/import.sh`, which sources all unique action files, and stores checksums in `~/.zmx/md5/`.
 
-### 4. Track source changes
-
-`_zmx_gen_md5` stores checksums in `~/.zmx/md5/`.
-
-This is auxiliary state used to track source changes. The current execution path mainly relies on re-sourcing action files before execution.
+The scan and md5 phases use worker pools, so those stages can process files concurrently.
 
 ## Managing Action Objects
 
@@ -114,8 +116,9 @@ Execution flow:
 
 It:
 1. sources `~/.loadhome.sh`
-2. sources `~/.zmx/import.sh`
-3. evaluates the requested action command
+2. sources `~/.zmx/import.sh` by default
+3. if `ZMX_ENABLE_COMPILED_CACHE=1`, it may prefer `~/.zmx/aio.sh.zwc` when the cache is fresh
+4. evaluates the requested action command
 
 This is what other repos often call when they want access to the environment's action objects without recreating the indexing logic themselves.
 
@@ -131,11 +134,22 @@ This matters because action files are edited frequently and are shared across mu
 
 Typical setup:
 
+```bash
+go build -o bin/zmx ./cmd/zmx
+(cd shellargs && go build -o /usr/local/bin/shellargs ./cmd/shellargs)
+```
+
 ```zsh
 zplug "woodgear/zmx"
 export SHELL_ACTIONS_PATH=/path/to/actions:/another/path
 zmx-reload-shell-actions
 ```
+
+`zmx-reload-shell-actions` calls `zmx` from `PATH`. Make sure the built binary is installed or the build output directory is exported into `PATH`.
+
+The shell helper commands use `shellargs` from `PATH`. Keep `/usr/local/bin/shellargs` on the latest version.
+
+Compiled cache is disabled by default. Enable it with `export ZMX_ENABLE_COMPILED_CACHE=1` if you want zsh to build and load `~/.zmx/aio.sh.zwc`.
 
 After the initial build, normal shell startup can use:
 
@@ -145,8 +159,12 @@ zmx-load-shell-actions
 
 ## File Structure
 
+- `cmd/zmx`
+  - Go CLI entrypoint for reload
+- `internal/reload`
+  - Go reload pipeline and tests
 - `zmx.plugin.zsh`
-  - main implementation
+  - shell integration and runtime loading
 - `zmx-call.sh`
   - non-interactive action executor
 - `runner/lua/zmx.lua.sh`
@@ -154,11 +172,31 @@ zmx-load-shell-actions
 - `legacy.sh`
   - older code and experiments
 
+## Code Style
+
+- in bash/zsh, prefer single-line local assignment when the value is available immediately
+- do not split declaration and assignment into two lines such as:
+
+```zsh
+local value
+value=$(some-command)
+```
+
+- prefer:
+
+```zsh
+local value=$(some-command)
+```
+
+- apply the same rule to simple parameter expansion and command substitution; finish the assignment on the same line when readability does not suffer
+
 ## Development Notes
 
 - action discovery is based on shell function definitions, not a separate manifest
-- functions starting with `_` are private and not exposed
+- functions starting with `_` are private and not exposed, but the current rg-compatible matcher still truncates names containing `_`
 - `arg-len` annotations are used to mark actions that require arguments
 - `~/.zmx/actions.db` is the central action registry
 - `~/.zmx/import.sh` is the generated import layer
+- `~/.zmx/aio.sh` and `~/.zmx/aio.sh.zwc` are the optional compiled load cache
+- build `bin/zmx` with `go build -o bin/zmx ./cmd/zmx` and keep `/usr/local/bin/shellargs` on the latest version before testing shell integration
 - when documenting zmx, focus on action discovery, inspection, path management, and execution flow
