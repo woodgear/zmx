@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"shellargs/internal/engine"
 	"shellargs/internal/spec"
 )
+
+var version = "dev"
+var commit = ""
 
 type exitError struct {
 	code int
@@ -57,6 +61,9 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCompletion(args[1:], stdout, stderr)
 	case "-h", "--help", "help-self":
 		printRootHelp(stdout)
+		return nil
+	case "-v", "--version", "version":
+		printVersion(stdout)
 		return nil
 	default:
 		printRootHelp(stderr)
@@ -363,6 +370,8 @@ func targetWantsHelp(args []string) bool {
 }
 
 func printRootHelp(w io.Writer) {
+	info := buildVersionInfo()
+	fmt.Fprintf(w, "shellargs version %s\ncommit %s\n\n", info.version, info.commit)
 	_, _ = fmt.Fprint(w, strings.TrimSpace(`
 shellargs turns a declarative spec string plus argv into JSON using go-flags.
 
@@ -378,6 +387,71 @@ Examples:
   shellargs help --spec-file repo-sync.args
   shellargs completion --shell bash --prog repo-sync --spec "$SPEC"
 `)+"\n")
+}
+
+func printVersion(w io.Writer) {
+	info := buildVersionInfo()
+	fmt.Fprintf(w, "shellargs version %s\n", info.version)
+	fmt.Fprintf(w, "commit %s\n", info.commit)
+}
+
+type versionInfo struct {
+	version string
+	commit  string
+}
+
+func buildVersionInfo() versionInfo {
+	out := versionInfo{
+		version: version,
+		commit:  commit,
+	}
+	if out.version == "" {
+		out.version = "dev"
+	}
+
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		if out.version == "dev" && buildInfo.Main.Version != "" && buildInfo.Main.Version != "(devel)" {
+			out.version = buildInfo.Main.Version
+		}
+		if out.commit == "" {
+			out.commit = vcsRevision(buildInfo)
+		}
+		if out.commit == "" {
+			out.commit = commitFromModuleVersion(buildInfo.Main.Version)
+		}
+	}
+
+	if out.commit == "" {
+		out.commit = "unknown"
+	}
+	return out
+}
+
+func vcsRevision(buildInfo *debug.BuildInfo) string {
+	for _, setting := range buildInfo.Settings {
+		if setting.Key == "vcs.revision" {
+			return setting.Value
+		}
+	}
+	return ""
+}
+
+func commitFromModuleVersion(value string) string {
+	parts := strings.Split(value, "-")
+	if len(parts) < 3 {
+		return ""
+	}
+	candidate := parts[len(parts)-1]
+	if len(candidate) < 7 {
+		return ""
+	}
+	for _, r := range candidate {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') {
+			continue
+		}
+		return ""
+	}
+	return candidate
 }
 
 func printParseHelp(w io.Writer) {
