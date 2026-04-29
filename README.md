@@ -30,6 +30,8 @@ Important files:
   - symlinked view of action source paths
 - `~/.zmx/actions.record`
   - execution records
+- `~/.zmx/completions/_zmx_actions`
+  - generated during reload for actions with valid `shellargs` specs
 
 ## Install
 
@@ -129,6 +131,9 @@ If an action needs arguments, zmx uses the `arg-len` annotation to decide whethe
   - find which file defines an action
 - `zmx-find-base-of-action`
   - find the base directory of the action source
+
+During `zmx reload`, zmx scans each indexed action function for a valid `@@@ ... @@@` shellargs spec and writes zsh completion definitions to `~/.zmx/completions/_zmx_actions`.
+`zmx-load-shell-actions` adds `~/.zmx/completions` to `fpath`; if `compinit` has already run, it also registers the generated `_zmx_actions` completion function for the discovered action names.
 
 ## Files
 

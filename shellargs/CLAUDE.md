@@ -11,6 +11,7 @@
 - 让 shell 代码通过 `jq` 等工具消费解析结果
 - 可选自动处理 `--help`
 - 生成 bash completion 脚本
+- 为 Go 调用方提供 zsh completion 生成库函数
 
 ## 当前实现了什么
 
@@ -28,6 +29,10 @@
 - `completion`
   - 生成 bash completion 脚本
   - 通过 `GO_FLAGS_COMPLETION=1` 走 `go-flags` 内建 completion
+- Go library
+  - `shellargs.ParseSpec`
+  - `shellargs.ZshCompletionScript`
+  - 当前由 zmx reload 直接调用，用 action 的 `@@@ ... @@@` spec 生成 zsh completion 文件，不经过 `shellargs` CLI
 - spec 装载时会自动识别 `@@@ ... @@@` 包裹块并裁掉首尾标记行
 
 当前 spec 支持三类字段：
@@ -118,7 +123,7 @@ arg path | repeatable | desc=Extra paths
 当前还没有做这些能力：
 
 - subcommand DSL
-- zsh/fish completion
+- CLI zsh/fish completion
 - 描述中的 `|` 转义
 - repeatable flag
 - 更复杂的类型系统

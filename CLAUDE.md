@@ -198,5 +198,6 @@ local value=$(some-command)
 - `~/.zmx/actions.db` is the central action registry
 - `~/.zmx/import.sh` is the generated import layer
 - `~/.zmx/aio.sh` and `~/.zmx/aio.sh.zwc` are the optional compiled load cache
+- `~/.zmx/completions/_zmx_actions` is generated during `zmx reload` from action `shellargs` specs; `zmx-load-shell-actions` adds `~/.zmx/completions` to `fpath` and registers the generated `_zmx_actions` function if `compinit` has already run
 - build `bin/zmx` with `go build -o bin/zmx ./cmd/zmx` and keep `/usr/local/bin/shellargs` on the latest version before testing shell integration
 - when documenting zmx, focus on action discovery, inspection, path management, and execution flow

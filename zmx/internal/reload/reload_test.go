@@ -37,6 +37,28 @@ function demo_second() {
 function another-action() {
   echo another
 }
+
+function parsed-action() {
+  local spec_doc='
+@@@
+name: parsed-action
+summary: Parsed action
+
+option branch | short=b | desc=Branch name
+arg target | required | desc=Target name
+@@@
+'
+  shellargs parse --spec "$spec_doc" -- "$@"
+}
+
+function example-only() {
+  local HELP='
+@@@
+example: example-only foo
+@@@
+'
+  echo "$HELP"
+}
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -53,11 +75,14 @@ function another-action() {
 		t.Fatal(err)
 	}
 
-	if result.Actions != 3 {
-		t.Fatalf("expected 3 actions, got %d", result.Actions)
+	if result.Actions != 5 {
+		t.Fatalf("expected 5 actions, got %d", result.Actions)
 	}
 	if result.Files != 1 {
 		t.Fatalf("expected 1 source file, got %d", result.Files)
+	}
+	if result.Completions != 1 {
+		t.Fatalf("expected 1 completion, got %d", result.Completions)
 	}
 
 	actionsDB, err := os.ReadFile(filepath.Join(baseDir, "actions.db"))
@@ -76,6 +101,9 @@ function another-action() {
 	}
 	if strings.Contains(actionsText, "demo_second") {
 		t.Fatalf("actions.db should preserve current no-underscore behavior:\n%s", actionsText)
+	}
+	if !strings.Contains(actionsText, "parsed-action") {
+		t.Fatalf("actions.db missing parsed-action:\n%s", actionsText)
 	}
 
 	importFile, err := os.ReadFile(filepath.Join(baseDir, "import.sh"))
@@ -115,6 +143,27 @@ function another-action() {
 	}
 	if !strings.Contains(recordText, "gen-md5 over") {
 		t.Fatalf("record missing gen-md5 step:\n%s", recordText)
+	}
+	if !strings.Contains(recordText, "gen-completions over") {
+		t.Fatalf("record missing gen-completions step:\n%s", recordText)
+	}
+
+	completionFile, err := os.ReadFile(filepath.Join(baseDir, "completions", "_zmx_actions"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	completionText := string(completionFile)
+	if !strings.Contains(completionText, "#compdef parsed-action") {
+		t.Fatalf("completion file missing parsed-action compdef header:\n%s", completionText)
+	}
+	if !strings.Contains(completionText, "case \"$service\" in") {
+		t.Fatalf("completion file missing service dispatcher:\n%s", completionText)
+	}
+	if !strings.Contains(completionText, "'--branch[Branch name]:BRANCH:'") {
+		t.Fatalf("completion file missing branch option:\n%s", completionText)
+	}
+	if strings.Contains(completionText, "example-only") {
+		t.Fatalf("completion file should skip non-shellargs example blocks:\n%s", completionText)
 	}
 }
 

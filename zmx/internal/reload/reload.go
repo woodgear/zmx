@@ -17,9 +17,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	shellargs "shellargs"
 )
 
 var actionPattern = regexp.MustCompile(`^function\s*([^\s()_]+).*[\(\{][^\}\)]*$`)
+var functionPattern = regexp.MustCompile(`^\s*function\s+\S+`)
 
 type Config struct {
 	Base        string
@@ -31,8 +34,9 @@ type Config struct {
 }
 
 type Result struct {
-	Actions int
-	Files   int
+	Actions     int
+	Files       int
+	Completions int
 }
 
 type runner struct {
@@ -55,6 +59,11 @@ type scanTarget struct {
 type md5Result struct {
 	SourcePath string
 	Value      string
+}
+
+type actionShellArgsSpec struct {
+	Action string
+	Spec   shellargs.Spec
 }
 
 func Run(ctx context.Context, cfg Config) (Result, error) {
@@ -133,6 +142,17 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
+	r.printf("reload step: gen-completions\n")
+	completionStart := time.Now()
+	completionCount, err := writeZshCompletions(cfg.Base, records)
+	if err != nil {
+		_ = r.appendRecord("reload step failed: gen-completions")
+		return Result{}, fmt.Errorf("zmx reload: write zsh completions: %w", err)
+	}
+	if err := r.appendRecord(fmt.Sprintf("gen-completions over, actions %d spend %s.", completionCount, formatDuration(time.Since(completionStart)))); err != nil {
+		return Result{}, err
+	}
+
 	r.printf("reload step: gen-md5\n")
 	md5Start := time.Now()
 	if err := writeMD5Files(cfg.Base, sourceFiles); err != nil {
@@ -143,7 +163,7 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	return Result{Actions: len(records), Files: len(sourceFiles)}, nil
+	return Result{Actions: len(records), Files: len(sourceFiles), Completions: completionCount}, nil
 }
 
 func (r runner) printf(format string, args ...any) {
@@ -425,6 +445,106 @@ func writeImportFile(base string, sourceFiles []string) error {
 		fmt.Fprintf(&builder, "source %s || true\n", sourceFile)
 	}
 	return writeFileAtomically(filepath.Join(base, "import.sh"), []byte(builder.String()), 0o644)
+}
+
+func writeZshCompletions(base string, records []actionRecord) (int, error) {
+	specs, err := collectActionShellArgsSpecs(records)
+	if err != nil {
+		return 0, err
+	}
+
+	var builder strings.Builder
+	if len(specs) == 0 {
+		builder.WriteString("# zmx generated completion file; no shellargs actions found.\n")
+	} else {
+		builder.WriteString("#compdef")
+		for _, actionSpec := range specs {
+			fmt.Fprintf(&builder, " %s", actionSpec.Action)
+		}
+		builder.WriteString("\n\n")
+		builder.WriteString("# zmx generated completion file; do not edit.\n\n")
+		builder.WriteString("case \"$service\" in\n")
+
+		for _, actionSpec := range specs {
+			fmt.Fprintf(&builder, "  %s)\n", shellQuote(actionSpec.Action))
+			builder.WriteString(shellargs.ZshCompletionBody(actionSpec.Spec, "    "))
+			builder.WriteString("    ;;\n")
+		}
+		builder.WriteString("  *)\n")
+		builder.WriteString("    _message 'unknown zmx action'\n")
+		builder.WriteString("    return 1\n")
+		builder.WriteString("    ;;\n")
+		builder.WriteString("esac\n")
+	}
+
+	completionPath := filepath.Join(base, "completions", "_zmx_actions")
+	if err := writeFileAtomically(completionPath, []byte(builder.String()), 0o644); err != nil {
+		return 0, err
+	}
+	return len(specs), nil
+}
+
+func collectActionShellArgsSpecs(records []actionRecord) ([]actionShellArgsSpec, error) {
+	linesBySource := map[string][]string{}
+	var specs []actionShellArgsSpec
+
+	for _, record := range records {
+		lines, exists := linesBySource[record.SourcePath]
+		if !exists {
+			data, err := os.ReadFile(record.SourcePath)
+			if err != nil {
+				return nil, err
+			}
+			lines = strings.Split(string(data), "\n")
+			linesBySource[record.SourcePath] = lines
+		}
+
+		for _, rawSpec := range shellArgsSpecBlocksForAction(lines, record.Line) {
+			parsedSpec, err := shellargs.ParseSpec(rawSpec)
+			if err != nil {
+				continue
+			}
+			specs = append(specs, actionShellArgsSpec{Action: record.Name, Spec: parsedSpec})
+			break
+		}
+	}
+
+	return specs, nil
+}
+
+func shellArgsSpecBlocksForAction(lines []string, lineNumber int) []string {
+	if lineNumber <= 0 || lineNumber > len(lines) {
+		return nil
+	}
+
+	start := lineNumber - 1
+	end := len(lines)
+	for idx := start + 1; idx < len(lines); idx++ {
+		if functionPattern.MatchString(lines[idx]) {
+			end = idx
+			break
+		}
+	}
+
+	var blocks []string
+	for idx := start; idx < end; idx++ {
+		if strings.TrimSpace(lines[idx]) != "@@@" {
+			continue
+		}
+
+		blockStart := idx + 1
+		for idx = blockStart; idx < end; idx++ {
+			if strings.TrimSpace(lines[idx]) == "@@@" {
+				block := strings.Join(lines[blockStart:idx], "\n")
+				if strings.TrimSpace(block) != "" {
+					blocks = append(blocks, block+"\n")
+				}
+				break
+			}
+		}
+	}
+
+	return blocks
 }
 
 func writeMD5Files(base string, sourceFiles []string) error {

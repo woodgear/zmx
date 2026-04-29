@@ -10,6 +10,7 @@
 - 可选自动处理 `--help`
 - 可判断目标 `argv` 是否是在请求帮助
 - 生成 bash completion 脚本
+- 为 Go 调用方提供 zsh completion 生成库函数
 
 ## Spec 语法
 
@@ -126,9 +127,14 @@ shellargs completion --shell bash --prog repo-sync --runner shellargs --spec "$S
 source ./repo-sync.completion.bash
 ```
 
+### Go 库生成 zsh completion
+
+`zmx reload` 直接调用 `shellargs.ParseSpec` 和 `shellargs.ZshCompletionScript`，在 reload 阶段从 action 的 `@@@ ... @@@` spec 生成 zsh completion 文件，不依赖 `shellargs` CLI。
+
 ## 当前边界
 
-- 当前只生成 bash completion
+- CLI 当前只生成 bash completion
+- zsh completion 目前作为 Go 库能力提供给 zmx reload 使用
 - 不支持 subcommand DSL
 - 不支持描述里的 `|`
 - 不支持 repeatable flag

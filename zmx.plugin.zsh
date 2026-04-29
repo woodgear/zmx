@@ -9,6 +9,10 @@ function _zmx_tools_dir() {
     echo "$ZMX_BASE/tools"
 }
 
+function _zmx_completion_dir() {
+    echo "$ZMX_BASE/completions"
+}
+
 function _zmx_plugin_dir() {
     local plugin_file=${functions_source[_zmx_plugin_dir]}
     local plugin_dir=$(cd "$(dirname "$plugin_file")" && pwd)
@@ -303,6 +307,7 @@ function zmx-load-shell-actions() {
     echo "load actions from import"
     source "$ZMX_BASE/import.sh"
   fi
+  zmx-load-completions || true
   echo "end source $?"
 
   local count=$(count-actions)
@@ -338,6 +343,72 @@ function count-actions() {
 
 function _zmx_before_run_action() {
   local name=$1
+}
+
+function _zmx_action_spec_doc() {
+  local name=$1
+  if [[ -z "$name" || -z "${functions[$name]}" ]]; then
+    return 1
+  fi
+
+  which "$name" 2>/dev/null | sed -n '/^[[:space:]]*@@@$/,/^[[:space:]]*@@@$/p' | sed '1d;$d'
+}
+
+function zmx-action-have-arg() {
+  local name=$1
+  if [[ -z "$name" ]]; then
+    echo "false"
+    return
+  fi
+
+  local spec_doc=$(_zmx_action_spec_doc "$name")
+  if [[ -n "$spec_doc" ]] && awk '$1 == "arg" { found = 1 } END { exit found ? 0 : 1 }' <<<"$spec_doc"; then
+    echo "true"
+    return
+  fi
+
+  local row=$(awk -v name="$name" '$1 == name { print; exit }' "$ZMX_BASE/actions.db" 2>/dev/null)
+  local source_file=$(awk '{ print $2 }' <<<"$row")
+  local line=$(awk '{ print $3 }' <<<"$row")
+  if [[ -n "$source_file" && -n "$line" && -f "$source_file" ]]; then
+    local annotation=$(sed -n "${line},$((line + 4))p" "$source_file")
+    if grep -q 'arg-len' <<<"$annotation"; then
+      echo "true"
+      return
+    fi
+  fi
+
+  echo "false"
+}
+
+function zmx-load-completions() {
+  local completion_dir=$(_zmx_completion_dir)
+  local completion_file="$completion_dir/_zmx_actions"
+  if [[ -z "${fpath[(r)$completion_dir]}" ]]; then
+    fpath=("$completion_dir" $fpath)
+  fi
+
+  if [[ ! -f "$completion_file" ]]; then
+    return 0
+  fi
+  if ! whence -w compdef >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local header=$(head -n 1 "$completion_file")
+  if [[ "$header" != '#compdef '* ]]; then
+    return 0
+  fi
+  header=${header#"#compdef "}
+
+  local -a actions
+  actions=("${(@z)header}")
+  if (( ${#actions[@]} == 0 )); then
+    return 0
+  fi
+
+  autoload -Uz _zmx_actions
+  compdef _zmx_actions "${actions[@]}"
 }
 
 function mx-without-zle() {
