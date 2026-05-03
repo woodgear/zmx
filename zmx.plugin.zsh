@@ -24,16 +24,35 @@ function _zmx_runtime_call_target() {
 }
 
 function _zmx_ensure_runtime_tools() {
-    local tools_dir=$(_zmx_tools_dir)
-    local target=$(_zmx_runtime_call_target)
+    local tools_dir="$ZMX_BASE/tools"
+    local wrapper="$tools_dir/zmx-call"
+    local wrapper_link="$tools_dir/zmx-call.sh"
+    local wrapper_content
+    local target
+
+    if [[ -x "$wrapper" && -L "$wrapper_link" ]]; then
+      return 0
+    fi
+
+    target=$(_zmx_runtime_call_target)
 
     mkdir -p "$ZMX_BASE" "$tools_dir"
-    cat >"$tools_dir/zmx-call" <<EOF
+    wrapper_content=$(cat <<EOF
 #!/bin/bash
 exec "$target" "\$@"
 EOF
-    chmod a+x "$tools_dir/zmx-call"
-    ln -sf "$tools_dir/zmx-call" "$tools_dir/zmx-call.sh"
+)
+
+    if [[ ! -f "$wrapper" || "$(<"$wrapper")" != "$wrapper_content" ]]; then
+      print -r -- "$wrapper_content" >| "$wrapper"
+      chmod a+x "$wrapper"
+    elif [[ ! -x "$wrapper" ]]; then
+      chmod a+x "$wrapper"
+    fi
+
+    if [[ "$(readlink "$wrapper_link" 2>/dev/null)" != "$wrapper" ]]; then
+      ln -sf "$wrapper" "$wrapper_link"
+    fi
 }
 
 
@@ -281,6 +300,10 @@ function zmx-watch-log() {
 
 function zmx-load-shell-actions() {
   local start=$(_date_now)
+  local had_loading_actions=$+ZMX_LOADING_ACTIONS
+  local old_loading_actions="${ZMX_LOADING_ACTIONS-}"
+  local source_status
+  local record
 
   _zmx_ensure_runtime_tools || return
   echo "start source"
@@ -300,6 +323,7 @@ function zmx-load-shell-actions() {
     fi
   fi
 
+  export ZMX_LOADING_ACTIONS=1
   if _zmx_compiled_cache_enabled && _zmx_compiled_cache_fresh; then
     echo "load actions from cache"
     source "$ZMX_BASE/aio.sh"
@@ -307,13 +331,27 @@ function zmx-load-shell-actions() {
     echo "load actions from import"
     source "$ZMX_BASE/import.sh"
   fi
-  zmx-load-completions || true
-  echo "end source $?"
+  source_status=$?
+  if (( had_loading_actions )); then
+    export ZMX_LOADING_ACTIONS="$old_loading_actions"
+  else
+    unset ZMX_LOADING_ACTIONS
+  fi
 
-  local count=$(count-actions)
-  local fn_count=$(zmx-list-actions-from-zsh | wc -l)
+  zmx-load-completions || true
+  echo "end source $source_status"
+
   local end=$(_date_now)
-  local record="load over, actions-db-fn $count zsh-fn $fn_count spend $(time-diff_ "$start" "$end")."
+  case "${${ZMX_LOAD_STATS:-1}:l}" in
+    1|true|yes|on)
+      local count=$(count-actions)
+      local fn_count=$(zmx-list-actions-from-zsh | wc -l)
+      record="load over, actions-db-fn $count zsh-fn $fn_count spend $(time-diff_ "$start" "$end")."
+      ;;
+    *)
+      record="load over, spend $(time-diff_ "$start" "$end")."
+      ;;
+  esac
   _zmx_append_record "$record"
 }
 
