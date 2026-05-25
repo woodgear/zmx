@@ -102,6 +102,16 @@ zmx-call.sh some-action
 zmx-call.sh some-action arg1 arg2
 ```
 
+### Graph actions
+
+```bash
+zmx graph build
+zmx graph view
+```
+
+`zmx graph build` reads `~/.zmx/actions.db` and writes `~/.zmx/graph/actions.json`.
+`zmx graph view` writes a self-contained viewer to `~/.zmx/graph/index.html`.
+
 ## How it works
 
 1. `zmx-reload-shell-actions` calls the Go binary `zmx reload`
@@ -131,6 +141,10 @@ If an action needs arguments, zmx uses the `arg-len` annotation to decide whethe
   - find which file defines an action
 - `zmx-find-base-of-action`
   - find the base directory of the action source
+- `zmx graph build`
+  - build action call graph JSON from the indexed action database
+- `zmx graph view`
+  - generate the static action graph viewer
 
 During `zmx reload`, zmx scans each indexed action function for a valid `@@@ ... @@@` shellargs spec and writes zsh completion definitions to `~/.zmx/completions/_zmx_actions`.
 `zmx-load-shell-actions` adds `~/.zmx/completions` to `fpath`; if `compinit` has already run, it also registers the generated `_zmx_actions` completion function for the discovered action names.
@@ -145,6 +159,8 @@ During `zmx reload`, zmx scans each indexed action function for a valid `@@@ ...
   - shell integration and runtime loading
 - `zmx-call.sh`
   - non-interactive executor
+- `internal/graph`
+  - action call graph extraction and static viewer generation
 - `runner/lua/zmx.lua.sh`
   - experimental runner
 - `legacy.sh`
